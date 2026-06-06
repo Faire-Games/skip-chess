@@ -57,6 +57,15 @@ public final class Game {
         self.init(board: Board.standardStartingPosition(), initialFEN: FEN.startingPositionFEN)
     }
 
+    /// Factory that parses a FEN string into a new game. Returns `nil` if
+    /// the FEN is malformed.
+    public static func fromFEN(_ fen: String) -> Game? {
+        guard let board = FEN.parse(fen) else {
+            return nil
+        }
+        return Game(board: board, initialFEN: fen)
+    }
+
     /// Creates a game from an existing board (the board is copied). The
     /// `initialFEN` is captured for replay purposes; if `nil`, it is
     /// generated from the supplied board.
@@ -111,6 +120,12 @@ public final class Game {
     /// initial position).
     public func currentPositionRepetitionCount() -> Int {
         return positionCounts[board.zobristKey] ?? 0
+    }
+
+    /// Returns the FEN string for the current position. Convenience for
+    /// ``FEN/serialize(_:)`` applied to ``board``.
+    public func currentFEN() -> String {
+        return FEN.serialize(board)
     }
 
     /// Returns the current game result, or `nil` if the game is still

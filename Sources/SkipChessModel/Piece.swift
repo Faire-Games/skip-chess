@@ -122,13 +122,18 @@ public enum PieceCode {
         return (color.rawValue << 3) | kind.rawValue
     }
 
-    /// Returns the ``Piece`` form for the encoded piece, or `nil` if empty.
+    /// Returns the ``Piece`` form for the encoded piece, or `nil` if empty
+    /// or if `code` is an invalid encoding (kind bits 1..6 are reserved;
+    /// `7` is an illegal kind and produces `nil` rather than a misleading
+    /// fallback piece).
     public static func piece(_ code: Int) -> Piece? {
         if code == 0 {
             return nil
         }
+        guard let k = PieceKind(rawValue: code & 0x7) else {
+            return nil
+        }
         let c: PieceColor = (code & 0x8) != 0 ? .black : .white
-        let k = PieceKind(rawValue: code & 0x7) ?? .pawn
         return Piece(color: c, kind: k)
     }
 

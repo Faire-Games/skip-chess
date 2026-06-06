@@ -2,16 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import Testing
-import OSLog
 import Foundation
 @testable import SkipChessModel
-
-let logger: Logger = Logger(subsystem: "SkipChessModel", category: "Tests")
 
 @Suite struct SkipChessModelTests {
 
     @Test func skipChessModel() throws {
-        logger.log("running testSkipChessModel")
         #expect(SkipChessModel.version == "1.0.0")
     }
 

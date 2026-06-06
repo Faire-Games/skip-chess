@@ -13,6 +13,19 @@ import SkipChessEngine
 /// The engine is designed to be deterministic at a given depth (modulo
 /// time-limit cutoffs) so that test cases can pin specific moves in tactical
 /// positions and assert that no proposed move is illegal.
+///
+/// ## Thread Safety
+///
+/// `AlphaBetaEngine` is **not** safe for concurrent calls to
+/// ``findBestMove(from:limits:control:listener:)``. The internal
+/// transposition table, killer slots, history heuristic, and per-ply
+/// search buffers are mutable state shared across recursive calls.
+/// External cancellation through ``SearchControl/requestStop()`` from
+/// another thread is supported and is the intended cross-thread API; the
+/// `Bool` flag relies on the JVM memory model for eventual visibility on
+/// Kotlin, which is acceptable for cooperative cancellation.
+///
+/// Create one engine instance per concurrent search.
 public final class AlphaBetaEngine: ChessEngine {
 
     // MARK: - Public protocol surface
@@ -238,9 +251,13 @@ public final class AlphaBetaEngine: ChessEngine {
             }
         }
 
-        // Store root entry in TT.
-        let encoded = CompactMove.encode(bestMove)
-        transpositionTable.store(key: board.zobristKey, score: bestScore, depth: depth, bound: TTBound.exact, move: encoded)
+        // Only persist a TT entry if the search completed without abort.
+        // Otherwise we'd pollute the table with partial results that could
+        // mislead a subsequent search at the same depth.
+        if !stopRequested {
+            let encoded = CompactMove.encode(bestMove)
+            transpositionTable.store(key: board.zobristKey, score: bestScore, depth: depth, bound: TTBound.exact, move: encoded)
+        }
         return RootResult(move: bestMove, score: bestScore)
     }
 
@@ -448,11 +465,13 @@ public final class AlphaBetaEngine: ChessEngine {
             return 90_000 + move.promotion
         }
         let encoded = CompactMove.encode(move)
-        if encoded == killerSlot0[ply] {
-            return 80_000
-        }
-        if encoded == killerSlot1[ply] {
-            return 70_000
+        if ply >= 0 && ply < killerSlot0.count {
+            if encoded == killerSlot0[ply] {
+                return 80_000
+            }
+            if encoded == killerSlot1[ply] {
+                return 70_000
+            }
         }
         return historyValue(move: move, color: board.sideToMove)
     }

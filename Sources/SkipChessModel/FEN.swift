@@ -10,8 +10,20 @@ import Foundation
 /// 2. Side to move ("w" or "b")
 /// 3. Castling rights ("KQkq", or "-")
 /// 4. En passant target square (e.g. "e3", or "-")
-/// 5. Halfmove clock
-/// 6. Fullmove number
+/// 5. Halfmove clock (optional; defaults to 0)
+/// 6. Fullmove number (optional; defaults to 1)
+///
+/// ## Strictness
+///
+/// The parser performs syntactic validation (correct number of ranks,
+/// recognized piece characters, parseable squares) but is intentionally
+/// lenient about chess-legality: it accepts positions with two kings of
+/// the same color, with no kings at all, with pawns on the first or last
+/// rank, with en-passant target squares on non-canonical ranks, etc.
+///
+/// Downstream APIs (``Board/legalMoves()``, ``Board/isCheck()``, …) handle
+/// such positions without crashing, but the results may be meaningless
+/// chess. Strict pre-validation is delegated to applications that need it.
 public enum FEN {
 
     /// The standard chess starting position.

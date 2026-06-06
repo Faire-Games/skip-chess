@@ -78,6 +78,18 @@ public final class Board {
         return FEN.parse(FEN.startingPositionFEN) ?? Board()
     }
 
+    /// Failable initializer that parses a FEN string. Convenience wrapper
+    /// for ``FEN/parse(_:)``.
+    public static func fromFEN(_ fen: String) -> Board? {
+        return FEN.parse(fen)
+    }
+
+    /// FEN serialization of the current position. Convenience for
+    /// ``FEN/serialize(_:)``.
+    public func toFEN() -> String {
+        return FEN.serialize(self)
+    }
+
     // MARK: - Piece Access
 
     /// Returns the piece code at a square (`0` if empty).

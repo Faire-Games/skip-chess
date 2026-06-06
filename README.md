@@ -83,9 +83,25 @@ plugs directly into a transposition table.
 ### FEN Parsing
 
 ```swift
+// Either via the FEN utility:
 let board = FEN.parse("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")!
 print(FEN.serialize(board))         // round-trip
+
+// Or via the convenience shorthand on Board:
+let same = Board.fromFEN("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")!
+print(same.toFEN())
+
+// Game has a factory too:
+let game = Game.fromFEN("4k3/8/8/8/8/8/8/4K3 w - - 0 1")!
+print(game.currentFEN())
 ```
+
+> **Lenient parsing.** `FEN.parse` validates syntax (rank shape, recognized
+> piece characters, parseable squares) but is intentionally lenient about
+> chess-legality. Positions with two same-color kings, no kings, pawns on
+> the back rank, or non-canonical en-passant targets all parse; downstream
+> queries degrade gracefully but their semantic results may be nonsense.
+> Apps that need strict validation should layer it on top.
 
 ### Every rule is supported
 
@@ -217,6 +233,13 @@ public struct SearchResult {
 * MVV-LVA capture ordering, killer move slots, and a history heuristic.
 * Quiescence search to neutralize the horizon effect.
 * Cooperative cancellation and per-depth progress callbacks.
+
+> **Thread safety.** `AlphaBetaEngine` is **not** safe for concurrent
+> calls to `findBestMove`. The transposition table, killer slots, and
+> history heuristic are shared mutable state. Create one engine per
+> concurrent search. Cooperative cancellation via
+> `SearchControl.requestStop()` from another thread is the intended
+> cross-thread API.
 
 ```swift
 let engine = AlphaBetaEngine()
@@ -385,7 +408,7 @@ This skip.dev project was created with the command:
 skip init --transpiled-model --free skip-chess SkipChess SkipChessModel SkipChessEngine SkipChessEngineAlphaBeta
 ```
 
-Then it was implemented by Claude Code with the following prompt:
+Then it was implemented by Claude Code in 52 minutes with the following prompt:
 
 > This is a skip.dev SwiftPM project. Implement a chess model in the
   SkipChessModel module that can be plugged into a real chess game and models
@@ -417,7 +440,19 @@ Then it was implemented by Claude Code with the following prompt:
   take breaks, but continue working until you have a complete,
   well-documented, throroughly researched implementation and an elegant API
   that can be imported and used by an actual chess app.
-  
+
+It was them polished and hardened with the prompt:
+
+> Perform a deep analysis and adversarial scrutiny of this package and try to   
+  find any flaws or defects in the logic, especially seeking edge cases that    
+  could crash valid API calls as well as illegal or sub-optimal scenarios in    
+  any of the modules or engine implementations. Add test cases and run them for 
+   any hypotheses you develop and need to test in action, and then run them     
+  with `swift test`. If you have any suspicions or theories that you cannot     
+  verify with tests, inclde them in the summary. In addition, review the public API   
+  for this package and ensure that it is complete, elegant, and intuitive while 
+   still keeping it minimal.
+   
 ## License
 
 This software is licensed under the
