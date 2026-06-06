@@ -17,32 +17,34 @@ let package = Package(
         .package(url: "https://source.skip.tools/skip-foundation.git", from: "1.0.0")
     ],
     targets: [
-        .target(name: "SkipChess", dependencies: [
-            "SkipChessModel"
-        ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
-        .testTarget(name: "SkipChessTests", dependencies: [
-            "SkipChess",
-            .product(name: "SkipTest", package: "skip")
-        ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .target(name: "SkipChessModel", dependencies: [
-            "SkipChessEngine"
+            .product(name: "SkipFoundation", package: "skip-foundation")
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .testTarget(name: "SkipChessModelTests", dependencies: [
             "SkipChessModel",
             .product(name: "SkipTest", package: "skip")
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .target(name: "SkipChessEngine", dependencies: [
-            "SkipChessEngineAlphaBeta"
+            "SkipChessModel"
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .testTarget(name: "SkipChessEngineTests", dependencies: [
             "SkipChessEngine",
             .product(name: "SkipTest", package: "skip")
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .target(name: "SkipChessEngineAlphaBeta", dependencies: [
-            .product(name: "SkipFoundation", package: "skip-foundation")
+            "SkipChessEngine"
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .testTarget(name: "SkipChessEngineAlphaBetaTests", dependencies: [
             "SkipChessEngineAlphaBeta",
+            .product(name: "SkipTest", package: "skip")
+        ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
+        .target(name: "SkipChess", dependencies: [
+            "SkipChessModel",
+            "SkipChessEngine",
+            "SkipChessEngineAlphaBeta"
+        ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
+        .testTarget(name: "SkipChessTests", dependencies: [
+            "SkipChess",
             .product(name: "SkipTest", package: "skip")
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
     ]

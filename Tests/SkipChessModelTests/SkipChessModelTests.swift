@@ -12,7 +12,7 @@ let logger: Logger = Logger(subsystem: "SkipChessModel", category: "Tests")
 
     @Test func skipChessModel() throws {
         logger.log("running testSkipChessModel")
-        #expect(1 + 2 == 3, "basic test")
+        #expect(SkipChessModel.version == "1.0.0")
     }
 
     @Test func decodeType() throws {
@@ -21,7 +21,6 @@ let logger: Logger = Logger(subsystem: "SkipChessModel", category: "Tests")
         let testData = try JSONDecoder().decode(TestData.self, from: Data(contentsOf: resourceURL))
         #expect(testData.testModuleName == "SkipChessModel")
     }
-
 }
 
 struct TestData : Codable, Hashable {

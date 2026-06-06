@@ -5,6 +5,8 @@ import Testing
 import OSLog
 import Foundation
 @testable import SkipChessEngineAlphaBeta
+import SkipChessModel
+import SkipChessEngine
 
 let logger: Logger = Logger(subsystem: "SkipChessEngineAlphaBeta", category: "Tests")
 
@@ -12,16 +14,14 @@ let logger: Logger = Logger(subsystem: "SkipChessEngineAlphaBeta", category: "Te
 
     @Test func skipChessEngineAlphaBeta() throws {
         logger.log("running testSkipChessEngineAlphaBeta")
-        #expect(1 + 2 == 3, "basic test")
+        #expect(SkipChessEngineAlphaBeta.version == "1.0.0")
     }
 
     @Test func decodeType() throws {
-        // load the TestData.json file from the Resources folder and decode it into a struct
         let resourceURL: URL = try #require(Bundle.module.url(forResource: "TestData", withExtension: "json"))
         let testData = try JSONDecoder().decode(TestData.self, from: Data(contentsOf: resourceURL))
         #expect(testData.testModuleName == "SkipChessEngineAlphaBeta")
     }
-
 }
 
 struct TestData : Codable, Hashable {
