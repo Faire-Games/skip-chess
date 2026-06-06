@@ -13,8 +13,8 @@ let package = Package(
         .library(name: "SkipChessEngineAlphaBeta", type: .dynamic, targets: ["SkipChessEngineAlphaBeta"]),
     ],
     dependencies: [
-        .package(url: "https://source.skip.tools/skip.git", from: "1.9.2"),
-        .package(url: "https://source.skip.tools/skip-lib.git", from: "1.0.0")
+        .package(url: "https://source.skip.dev/skip.git", from: "1.9.2"),
+        .package(url: "https://source.skip.dev/skip-lib.git", from: "1.0.0")
     ],
     targets: [
         .target(name: "SkipChessModel", dependencies: [
