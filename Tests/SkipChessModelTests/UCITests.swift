@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import Testing
-import Foundation
 @testable import SkipChessModel
 
 @Suite struct UCITests {

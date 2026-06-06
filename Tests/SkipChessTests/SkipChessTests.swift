@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import Testing
-import Foundation
 @testable import SkipChess
 import SkipChessModel
 import SkipChessEngine
@@ -12,12 +11,6 @@ import SkipChessEngineAlphaBeta
 
     @Test func skipChess() throws {
         #expect(SkipChess.version == "1.0.0")
-    }
-
-    @Test func decodeType() throws {
-        let resourceURL: URL = try #require(Bundle.module.url(forResource: "TestData", withExtension: "json"))
-        let testData = try JSONDecoder().decode(TestData.self, from: Data(contentsOf: resourceURL))
-        #expect(testData.testModuleName == "SkipChess")
     }
 
     @Test func umbrellaReExportsModelTypes() throws {
@@ -67,8 +60,4 @@ import SkipChessEngineAlphaBeta
         #expect(halfMovesPlayed > 0)
         #expect(game.moveHistory.count == halfMovesPlayed)
     }
-}
-
-struct TestData : Codable, Hashable {
-    var testModuleName: String
 }

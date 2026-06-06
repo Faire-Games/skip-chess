@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// FEN (Forsyth–Edwards Notation) parsing and serialization.
 ///
@@ -38,7 +37,7 @@ public enum FEN {
     /// Parses a FEN string into a ``Board``. Returns `nil` if the string is
     /// malformed.
     public static func parse(_ fen: String) -> Board? {
-        let trimmed = fen.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = trimAsciiWhitespace(fen)
         let parts = trimmed.split(separator: " ", omittingEmptySubsequences: true).map { String($0) }
         if parts.count < 4 {
             return nil
@@ -192,5 +191,48 @@ public enum FEN {
         fen += String(board.fullmoveNumber)
 
         return fen
+    }
+
+    /// Returns `s` with leading and trailing ASCII whitespace removed.
+    ///
+    /// Equivalent to ``String/trimmingCharacters(in:)`` with
+    /// `.whitespacesAndNewlines` for our purposes (FEN strings are pure
+    /// ASCII), but implemented without ``Foundation`` so the module can be
+    /// transpiled by Skip without the SkipFoundation dependency. Trims
+    /// space, tab, newline, carriage return, vertical tab, and form feed.
+    private static func trimAsciiWhitespace(_ s: String) -> String {
+        // Build the trimmed string by skipping leading and trailing
+        // whitespace characters. Iterating over the String once and
+        // appending preserves the original UTF-8 contents for non-ASCII
+        // bytes embedded in the middle of the string.
+        var startIdx = s.startIndex
+        var endIdx = s.endIndex
+        // Advance startIdx past leading whitespace.
+        while startIdx < endIdx {
+            let c = s[startIdx]
+            if !isAsciiWhitespace(c) {
+                break
+            }
+            startIdx = s.index(after: startIdx)
+        }
+        // Retreat endIdx past trailing whitespace.
+        while endIdx > startIdx {
+            let prev = s.index(before: endIdx)
+            let c = s[prev]
+            if !isAsciiWhitespace(c) {
+                break
+            }
+            endIdx = prev
+        }
+        return String(s[startIdx..<endIdx])
+    }
+
+    /// `true` if `c` is one of the ASCII whitespace characters that
+    /// ``trimmingCharacters(in: .whitespacesAndNewlines)`` would strip for
+    /// FEN purposes: space, tab, newline, carriage return, vertical tab,
+    /// or form feed.
+    private static func isAsciiWhitespace(_ c: Character) -> Bool {
+        return c == " " || c == "\t" || c == "\n" || c == "\r"
+            || c == "\u{000B}" || c == "\u{000C}"
     }
 }

@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 import SkipChessModel
 import SkipChessEngine
 
@@ -176,12 +175,24 @@ public final class AlphaBetaEngine: ChessEngine {
     }
 
     private func currentMilliseconds() -> Int64 {
-        // Use a wall-clock source available on both Swift and Skip's
-        // transpiled Foundation. ``Date().timeIntervalSince1970`` is widely
-        // supported; multiply by 1000 to get integer milliseconds.
-        let seconds: Double = Date().timeIntervalSince1970
-        return Int64(seconds * 1000.0)
+        #if SKIP
+        return java.lang.System.currentTimeMillis()
+        #else
+        // Use Swift stdlib's monotonic clock so this module doesn't pull in
+        // Foundation. ContinuousClock is available in Swift 5.7+ and is a
+        // monotonic source suitable for elapsed-time measurements.
+        let elapsed = ContinuousClock.now - AlphaBetaEngine.clockOrigin
+        let components = elapsed.components
+        // components.seconds is whole seconds, attoseconds is the
+        // fractional remainder (10^-18 second units). 10^15 attoseconds = 1ms.
+        return components.seconds * 1000 + components.attoseconds / 1_000_000_000_000_000
+        #endif
     }
+
+    #if !SKIP
+    /// A stable reference point for ``ContinuousClock`` measurements.
+    private static let clockOrigin = ContinuousClock.now
+    #endif
 
     private func elapsedMilliseconds() -> Int64 {
         return currentMilliseconds() - startMilliseconds

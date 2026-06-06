@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// The `SkipChessModel` module provides a complete model of the rules of
 /// chess: piece encodings, board state, FEN serialization, move generation

@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// The outcome of a chess game (or `nil` if it is still in progress).
 public enum GameResult: Hashable, Sendable {

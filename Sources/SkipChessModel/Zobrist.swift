@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// Precomputed pseudo-random keys used for incremental Zobrist hashing of
 /// chess positions. All keys are 64-bit so they remain stable across the

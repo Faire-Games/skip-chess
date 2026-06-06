@@ -14,11 +14,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://source.skip.tools/skip.git", from: "1.9.2"),
-        .package(url: "https://source.skip.tools/skip-foundation.git", from: "1.0.0")
+        .package(url: "https://source.skip.tools/skip-lib.git", from: "1.0.0")
     ],
     targets: [
         .target(name: "SkipChessModel", dependencies: [
-            .product(name: "SkipFoundation", package: "skip-foundation")
+            .product(name: "SkipLib", package: "skip-lib")
         ], resources: [.process("Resources")], plugins: [.plugin(name: "skipstone", package: "skip")]),
         .testTarget(name: "SkipChessModelTests", dependencies: [
             "SkipChessModel",

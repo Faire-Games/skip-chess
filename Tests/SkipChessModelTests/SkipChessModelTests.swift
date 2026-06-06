@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import Testing
-import Foundation
 @testable import SkipChessModel
 
 @Suite struct SkipChessModelTests {
@@ -10,15 +9,4 @@ import Foundation
     @Test func skipChessModel() throws {
         #expect(SkipChessModel.version == "1.0.0")
     }
-
-    @Test func decodeType() throws {
-        // load the TestData.json file from the Resources folder and decode it into a struct
-        let resourceURL: URL = try #require(Bundle.module.url(forResource: "TestData", withExtension: "json"))
-        let testData = try JSONDecoder().decode(TestData.self, from: Data(contentsOf: resourceURL))
-        #expect(testData.testModuleName == "SkipChessModel")
-    }
-}
-
-struct TestData : Codable, Hashable {
-    var testModuleName: String
 }

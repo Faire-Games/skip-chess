@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// Pseudo- and fully-legal move generation. Stateless: every method receives
 /// a ``Board`` and writes into a caller-supplied buffer to avoid allocating

@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// The color of a chess piece (or the side to move).
 public enum PieceColor: Int, Sendable, CaseIterable {

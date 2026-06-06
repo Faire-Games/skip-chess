@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 import SkipChessModel
 
 /// Type of node-evaluation bound stored in a transposition table entry.

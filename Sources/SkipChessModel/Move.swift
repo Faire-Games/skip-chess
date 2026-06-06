@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// A single chess move. Captures are implied by the destination square's
 /// occupancy on the position the move is applied to.

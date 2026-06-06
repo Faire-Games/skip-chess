@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 
 /// A mutable chess position: piece placement plus all state required to
 /// generate moves and detect game-end conditions.

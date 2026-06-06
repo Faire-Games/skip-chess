@@ -1,7 +1,6 @@
 // Licensed under the Mozilla Public License 2.0
 // SPDX-License-Identifier: MPL-2.0
 
-import Foundation
 import SkipChessModel
 
 /// PeSTO ("Pawn-eval/Search-tweaked Optimized") piece-square tables and
