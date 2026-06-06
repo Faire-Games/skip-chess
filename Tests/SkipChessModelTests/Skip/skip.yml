@@ -1,0 +1,4 @@
+# Skip configuration for SkipChessModelTests module
+
+#build:
+#  contents:
