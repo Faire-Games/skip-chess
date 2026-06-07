@@ -59,9 +59,66 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
 
       <!-- Right column: single combined sidebar. New Game + Status are
            merged into one card with each sub-section delimited by an
-           uppercase mini-heading. Replay panel sits at the top when
-           active. Store badges + Engine footer live at the bottom. -->
+           uppercase mini-heading. The theme picker + fullscreen toggle
+           are pinned to the top of this column (above the sidebar)
+           rather than floating — that keeps them stable on mobile,
+           where the column drops below the board in single-column
+           mode, and prevents the picker from overlapping the timer. -->
       <div>
+        <div class="top-right-controls">
+          <div class="theme-picker" role="radiogroup" aria-label="Color theme">
+            <button id="btn-theme-light" class="theme-segment" type="button"
+                    role="radio" data-theme="light" aria-checked="false"
+                    aria-label="Light theme" title="Light theme">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+              </svg>
+            </button>
+            <button id="btn-theme-system" class="theme-segment" type="button"
+                    role="radio" data-theme="system" aria-checked="true"
+                    aria-label="System theme" title="System theme">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="14" rx="2" ry="2"></rect>
+                <path d="M8 22h8M12 18v4"></path>
+              </svg>
+            </button>
+            <button id="btn-theme-dark" class="theme-segment" type="button"
+                    role="radio" data-theme="dark" aria-checked="false"
+                    aria-label="Dark theme" title="Dark theme">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+              </svg>
+            </button>
+          </div>
+          <button id="btn-fullscreen" class="fullscreen-toggle" type="button"
+                  title="Toggle fullscreen" aria-label="Toggle fullscreen">
+            <svg id="icon-fullscreen-enter" width="18" height="18" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 9V4h5"></path>
+              <path d="M20 9V4h-5"></path>
+              <path d="M4 15v5h5"></path>
+              <path d="M20 15v5h-5"></path>
+            </svg>
+            <svg id="icon-fullscreen-exit" width="18" height="18" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 style="display:none">
+              <path d="M9 4v5H4"></path>
+              <path d="M15 4v5h5"></path>
+              <path d="M9 20v-5H4"></path>
+              <path d="M15 20v-5h5"></path>
+            </svg>
+          </button>
+        </div>
+
         <div class="sidebar-card">
           <!-- Replay scrubber. Shown only during replay mode. -->
           <div id="replay-panel" class="replay-panel" hidden>
@@ -233,64 +290,23 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
       </div>
     </div>
 
-    <!-- Top-right floating toolbar: theme picker + fullscreen button.
-         Fixed-positioned so it sits above the Status section in the
-         upper-right corner and remains reachable in fullscreen mode
-         (its host node is outside `.app-shell`, which fullscreen mode
-         hides via `display:none`). -->
-    <div class="top-right-controls">
-      <div class="theme-picker" role="radiogroup" aria-label="Color theme">
-        <button id="btn-theme-light" class="theme-segment" type="button"
-                role="radio" data-theme="light" aria-checked="false"
-                aria-label="Light theme" title="Light theme">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
-          </svg>
-        </button>
-        <button id="btn-theme-system" class="theme-segment" type="button"
-                role="radio" data-theme="system" aria-checked="true"
-                aria-label="System theme" title="System theme">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true">
-            <rect x="2" y="4" width="20" height="14" rx="2" ry="2"></rect>
-            <path d="M8 22h8M12 18v4"></path>
-          </svg>
-        </button>
-        <button id="btn-theme-dark" class="theme-segment" type="button"
-                role="radio" data-theme="dark" aria-checked="false"
-                aria-label="Dark theme" title="Dark theme">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
-          </svg>
-        </button>
-      </div>
-      <button id="btn-fullscreen" class="fullscreen-toggle" type="button"
-              title="Toggle fullscreen" aria-label="Toggle fullscreen">
-        <svg id="icon-fullscreen-enter" width="18" height="18" viewBox="0 0 24 24"
-             fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 9V4h5"></path>
-          <path d="M20 9V4h-5"></path>
-          <path d="M4 15v5h5"></path>
-          <path d="M20 15v5h-5"></path>
-        </svg>
-        <svg id="icon-fullscreen-exit" width="18" height="18" viewBox="0 0 24 24"
-             fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"
-             style="display:none">
-          <path d="M9 4v5H4"></path>
-          <path d="M15 4v5h5"></path>
-          <path d="M9 20v-5H4"></path>
-          <path d="M15 20v-5h5"></path>
-        </svg>
-      </button>
-    </div>
+    <!-- A duplicated fullscreen button that appears only in fullscreen
+         mode, fixed in the top-right corner. The in-flow toolbar above
+         the sidebar is hidden during fullscreen (its parent column is
+         hidden), so we keep a tiny escape hatch here so users can
+         always click their way back out without having to know about
+         the Esc / F keyboard shortcuts. -->
+    <button id="btn-fullscreen-exit" class="fullscreen-exit-button"
+            type="button" aria-label="Exit fullscreen" title="Exit fullscreen">
+      <svg width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 4v5H4"></path>
+        <path d="M15 4v5h5"></path>
+        <path d="M9 20v-5H4"></path>
+        <path d="M15 20v-5h5"></path>
+      </svg>
+    </button>
 
     <script>
       // Imports inside a hoisted Astro <script> tag are resolved by Vite,

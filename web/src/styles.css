@@ -104,6 +104,14 @@ html, body {
   }
 }
 
+/* Both grid items must be allowed to shrink below their natural
+ * min-content; otherwise a row inside (e.g. the badges, the replay
+ * slider, or a long FEN) can push the grid track wider than the
+ * viewport, causing horizontal overflow. */
+.app-shell > * {
+  min-width: 0;
+}
+
 .app-shell h1 {
   margin: 0 0 1rem 0;
   font-weight: 600;
@@ -127,11 +135,15 @@ html, body {
  * inside it scrolls if necessary to keep everything else visible. */
 @media (min-width: 1001px) {
   .sidebar-card {
-    margin-top: var(--captures-row-h);
+    /* Push the sidebar down so its top edge aligns with the top of
+     * the board itself. The toolbar above is ~2.2rem tall and sits at
+     * y=0 (column top); the sidebar's effective top is therefore
+     * `2.2rem + this margin-top`, which we set so it equals
+     * `--captures-row-h` (the board's top y). The sidebar's height is
+     * the full board size, so its bottom also lines up with the
+     * board's bottom. */
+    margin-top: calc(var(--captures-row-h) - 2.2rem);
     height: var(--board-size);
-    /* Leave room for the bottom captures+clock row of the board so
-     * the sidebar bottom lines up with the bottom of the BOARD (not
-     * with the bottom captures row). */
   }
 }
 
@@ -275,22 +287,58 @@ label.status-toggle {
   cursor: pointer;
 }
 
-/* ─────────────────────────────────────────────────  Top-right toolbar
+/* ─────────────────────────────────────────────────  Sidebar toolbar
  *
- * Fixed in the upper-right corner of the page, sitting above the Status
- * section. Houses the Light / System / Dark theme picker and the
- * fullscreen toggle as siblings of a flex row. Stays reachable in
- * fullscreen mode because it lives outside `.app-shell`, which the
- * fullscreen-mode rule hides via `display:none`.
+ * Pinned to the top of the right column (above the sidebar-card) so
+ * the picker + fullscreen button move WITH the layout — in 2-column
+ * mode they sit above the Status section; in 1-column mode they drop
+ * below the board along with the rest of the right column. No longer
+ * floats over the board, so it can't overlap the timer on mobile.
  */
 .top-right-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* In 2-column wide mode, the toolbar sits at the very top of the
+ * column so its top edge aligns with the top of the captures+clock
+ * row of the board. The sidebar below it gets `margin-top` set so
+ * ITS top lines up with the top of the BOARD itself. */
+@media (min-width: 1001px) {
+  .top-right-controls {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
+/* The separate exit-fullscreen button lives outside .app-shell — it's
+ * hidden in normal mode and only shown while body.fullscreen is set. */
+.fullscreen-exit-button {
+  display: none;
+}
+body.fullscreen .fullscreen-exit-button {
+  display: flex;
   position: fixed;
   top: 0.75rem;
   right: 0.75rem;
-  display: flex;
+  z-index: 60;
   align-items: center;
-  gap: 0.5rem;
-  z-index: 50;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+body.fullscreen .fullscreen-exit-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
 /* In the corner, the picker is icon-only (segments display only the
@@ -360,6 +408,9 @@ label.status-toggle {
   justify-content: center;
   gap: 0.4rem;
   width: 100%;
+  /* Wrap on very narrow viewports so three side-by-side badges never
+   * push the column past the available width. */
+  flex-wrap: wrap;
 }
 
 .store-badge {
@@ -741,10 +792,14 @@ label.status-toggle {
 }
 
 .footer {
-  margin-top: 2rem;
+  margin-top: 0.85rem;
   text-align: center;
   color: var(--color-text-muted);
-  font-size: 0.85rem;
+  font-size: 0.68rem;
+  /* Force single-line: never wrap, hide any overflow gracefully. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .footer a {
@@ -1233,29 +1288,10 @@ body.fullscreen .board-side {
   margin: 0;
 }
 
-/* Translucent corner widgets in fullscreen so they sit cleanly on the
- * darkened immersive background. Applies to both the theme picker and
- * the fullscreen toggle inside `.top-right-controls`. */
-body.fullscreen .theme-picker,
-body.fullscreen .fullscreen-toggle {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.85);
-}
-body.fullscreen .theme-segment {
-  color: rgba(255, 255, 255, 0.7);
-}
-body.fullscreen .theme-segment[aria-checked="true"] {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-body.fullscreen .theme-segment:hover {
-  color: white;
-}
-
-body.fullscreen .fullscreen-toggle:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
+/* In fullscreen mode, the in-flow theme picker + fullscreen toggle
+ * inside the right column are hidden along with the rest of that
+ * column. A separate floating `.fullscreen-exit-button` (styled in the
+ * sidebar-toolbar section above) provides the visible exit route. */
 
 body.fullscreen .clock {
   background: rgba(255, 255, 255, 0.08);

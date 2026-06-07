@@ -151,7 +151,7 @@ function updateFullscreenIcons(): void {
   }
 }
 
-fullscreenBtn.addEventListener("click", () => {
+function toggleFullscreen(): void {
   const doc = document as VendorFullscreenDocument;
   if (isInFullscreen()) {
     const exitFn = doc.exitFullscreen ?? doc.webkitExitFullscreen;
@@ -163,7 +163,12 @@ fullscreenBtn.addEventListener("click", () => {
       req.call(root).catch((err: unknown) => console.warn("fullscreen denied", err));
     }
   }
-});
+}
+
+fullscreenBtn.addEventListener("click", toggleFullscreen);
+// Separate floating "exit fullscreen" button that's only visible while
+// `body.fullscreen` is set (the in-flow toolbar is hidden then).
+$<HTMLButtonElement>("btn-fullscreen-exit").addEventListener("click", toggleFullscreen);
 
 document.addEventListener("fullscreenchange", updateFullscreenIcons);
 document.addEventListener("webkitfullscreenchange", updateFullscreenIcons);
