@@ -5,7 +5,8 @@ chess model, generic engine protocols, and a bundled alpha-beta engine using
 PeSTO evaluation. Builds natively for Swift on iOS/macOS and transpiles
 losslessly to Kotlin for Android.
 
-The package is organized as four modules:
+The package is organized as four library modules plus a WebAssembly
+executable that powers the bundled browser front-end:
 
 | Module                       | Purpose |
 |------------------------------|---------|
@@ -13,6 +14,7 @@ The package is organized as four modules:
 | `SkipChessEngine`            | Generic engine protocols (`ChessEngine`, `PositionEvaluator`, …) and reference utilities. |
 | `SkipChessEngineAlphaBeta`   | Alpha-beta search with PeSTO evaluation, iterative deepening, TT, killer moves, quiescence. |
 | `SkipChess`                  | Umbrella module re-exporting all of the above (use `import SkipChess` to get everything). |
+| `SkipChessWeb` (executable)  | WASM-facing C-compatible ABI used by the Astro web front-end in [`web/`](web/). See [web/README.md](web/README.md) for build and run instructions. |
 
 ## Installation
 

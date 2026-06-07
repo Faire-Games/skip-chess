@@ -1,0 +1,169 @@
+---
+import "../styles.css";
+import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>SkipChess — WebAssembly Chess</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- Left column: game setup menu -->
+      <div>
+        <h1>SkipChess</h1>
+        <p class="subtitle">
+          A WebAssembly chess engine built with Swift. Pick your settings
+          and play against the bundled alpha-beta engine.
+        </p>
+        <div class="menu-card">
+          <h2 style="margin:0 0 0.5rem 0; font-size:1rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--color-text-muted);">
+            New Game
+          </h2>
+
+          <label for="opt-color">You play as</label>
+          <select id="opt-color">
+            <option value="white" selected>White</option>
+            <option value="black">Black</option>
+            <option value="random">Random</option>
+          </select>
+
+          <label for="opt-difficulty">Difficulty</label>
+          <select id="opt-difficulty">
+            {DIFFICULTIES.map((d) => (
+              <option value={d.id} selected={d.id === "hard"}>{d.label} (≈ {d.elo} ELO)</option>
+            ))}
+          </select>
+          <div id="difficulty-detail" class="difficulty-elo"></div>
+
+          <label for="opt-time">Time control</label>
+          <select id="opt-time">
+            {TIME_CONTROLS.map((t) => (
+              <option value={t.id}>{t.label}</option>
+            ))}
+          </select>
+
+          <button id="btn-start-game">Start game</button>
+          <button id="btn-load-fen" class="secondary" type="button">Load FEN…</button>
+        </div>
+      </div>
+
+      <!-- Center column: board + captures + clocks -->
+      <div class="board-column">
+        <!-- Top: opponent (black-by-default) captures + clock -->
+        <div class="board-side board-side-top">
+          <div id="captures-black" class="captures captures-by-black"></div>
+          <div id="black-clock" class="clock">—</div>
+        </div>
+        <div class="board-area">
+          <div id="board" class="board"></div>
+        </div>
+        <!-- Bottom: player (white-by-default) captures + clock -->
+        <div class="board-side board-side-bottom">
+          <div id="captures-white" class="captures captures-by-white"></div>
+          <div id="white-clock" class="clock">—</div>
+        </div>
+
+        <!-- Game-result banner. Sits BELOW the board so the final
+             position remains fully visible for analysis. Hidden until a
+             result lands. -->
+        <div id="game-over-banner" class="game-result-banner" role="status"
+             aria-live="polite" hidden>
+          <div id="game-over-icon" class="game-result-icon" aria-hidden="true"></div>
+          <div class="game-result-text">
+            <h2 id="game-over-result" class="game-result-title">Checkmate</h2>
+            <p id="game-over-reason" class="game-result-reason"></p>
+          </div>
+          <div class="game-result-actions">
+            <button id="btn-game-over-replay" class="secondary" type="button">
+              Replay
+            </button>
+            <button id="btn-game-over-new" class="primary" type="button">
+              New Game
+            </button>
+          </div>
+        </div>
+
+        <!-- Replay scrubber. Shown when the user enters replay mode (from
+             the result banner or via Replay during a finished game). -->
+        <div id="replay-panel" class="replay-panel" hidden>
+          <div class="replay-row">
+            <button id="btn-replay-first" class="replay-step" type="button"
+                    aria-label="Jump to start" title="Jump to start">⏮</button>
+            <button id="btn-replay-prev" class="replay-step" type="button"
+                    aria-label="Previous move" title="Previous move">◀</button>
+            <input id="replay-slider" class="replay-slider" type="range"
+                   min="0" max="0" step="1" value="0"
+                   aria-label="Move slider" />
+            <button id="btn-replay-next" class="replay-step" type="button"
+                    aria-label="Next move" title="Next move">▶</button>
+            <button id="btn-replay-last" class="replay-step" type="button"
+                    aria-label="Jump to end" title="Jump to end">⏭</button>
+          </div>
+          <div class="replay-row replay-row-bottom">
+            <span id="replay-counter" class="replay-counter">— / —</span>
+            <span id="replay-move-label" class="replay-move-label"></span>
+            <button id="btn-replay-exit" class="secondary" type="button">
+              Exit replay
+            </button>
+          </div>
+        </div>
+
+        <div class="loading-row">
+          <span id="loading-indicator">Loading WebAssembly engine…</span>
+        </div>
+      </div>
+
+      <!-- Right column: status, moves, eval -->
+      <div>
+        <div class="sidebar-card">
+          <h2>Status</h2>
+          <p id="status" class="status">—</p>
+          <p id="eval" class="eval"></p>
+          <h2 style="margin-top:1rem;">Moves</h2>
+          <ol id="move-list" class="move-list"></ol>
+          <div class="toolbar">
+            <button id="btn-undo">Undo</button>
+            <button id="btn-resign">Resign</button>
+          </div>
+        </div>
+        <p class="footer">
+          Pieces by <a href="https://github.com/lichess-org/lila/tree/master/public/piece">lichess.org</a>.<br />
+          Engine: SkipChess (alpha-beta + PeSTO) compiled to WebAssembly.
+        </p>
+      </div>
+    </div>
+
+    <!-- Floating fullscreen toggle — visible both in regular and fullscreen
+         mode so the user always has a way back out. -->
+    <button id="btn-fullscreen" class="fullscreen-toggle" type="button"
+            title="Toggle fullscreen" aria-label="Toggle fullscreen">
+      <svg id="icon-fullscreen-enter" width="20" height="20" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 9V4h5"></path>
+        <path d="M20 9V4h-5"></path>
+        <path d="M4 15v5h5"></path>
+        <path d="M20 15v5h-5"></path>
+      </svg>
+      <svg id="icon-fullscreen-exit" width="20" height="20" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"
+           style="display:none">
+        <path d="M9 4v5H4"></path>
+        <path d="M15 4v5h5"></path>
+        <path d="M9 20v-5H4"></path>
+        <path d="M15 20v-5h5"></path>
+      </svg>
+    </button>
+
+    <script>
+      // Imports inside a hoisted Astro <script> tag are resolved by Vite,
+      // bundled, and rewritten to a hashed URL at build time.
+      import "../main.ts";
+    </script>
+  </body>
+</html>

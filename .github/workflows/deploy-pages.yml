@@ -1,0 +1,161 @@
+# Builds the Skip Chess web frontend (Astro + a Swift -> WebAssembly engine)
+# and deploys the resulting static site to GitHub Pages.
+#
+# Two-job layout per the GitHub Pages starter workflow:
+#   build  - compiles the WASM module via SwiftPM + the SwiftWasm SDK, then runs
+#            withastro/action to build the Astro site and upload the
+#            `github-pages` artifact.
+#   deploy - consumes that artifact via actions/deploy-pages@v4 inside the
+#            `github-pages` environment.
+#
+# Before this workflow can succeed end-to-end, the repo's Settings > Pages >
+# Source must be set to "GitHub Actions" (one-time manual repo setting).
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# OIDC token is required by actions/deploy-pages so it can verify the
+# deployment source. `contents: read` is for actions/checkout, `pages: write`
+# is for publishing to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages convention: let in-flight deploys finish rather than be cancelled by a
+# newer push, otherwise the live site can end up in an inconsistent state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build WASM and Astro site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Standard swift.org dependency list for the Ubuntu 24.04 toolchain
+      # (ubuntu-latest is currently 24.04). libatomic1 in particular is
+      # required at link time when the WASM SDK pulls in its static archives.
+      - name: Install Swift toolchain APT dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            binutils \
+            git \
+            gnupg2 \
+            libc6-dev \
+            libcurl4-openssl-dev \
+            libedit2 \
+            libgcc-13-dev \
+            libncurses-dev \
+            libpython3-dev \
+            libsqlite3-0 \
+            libstdc++-13-dev \
+            libxml2-dev \
+            libz3-dev \
+            pkg-config \
+            tzdata \
+            unzip \
+            zip \
+            zlib1g-dev \
+            libatomic1
+
+      # We use Swiftly (the swift.org-recommended installer) rather than
+      # swift-actions/setup-swift, which has an unresolved bug (issue #801)
+      # where its version index has not been updated for Swift 6.3.x.
+      - name: Install Swiftly
+        uses: vapor/swiftly-action@v0.2.1
+
+      # Swiftly resolves the bare version against swift.org's published
+      # releases and prepends the toolchain's bin dir to PATH for subsequent
+      # steps in the same job.
+      - name: Install Swift 6.3.1
+        run: |
+          swiftly install --use 6.3.1
+          swift --version
+
+      # Install the official swift.org WebAssembly SDK 6.3.1. The artifact id
+      # baked into its info.json is `swift-6.3.1-RELEASE_wasm`, which is
+      # exactly the value passed to `--swift-sdk` in web/package.json's
+      # `build:wasm` script — so the npm script runs unchanged.
+      #
+      # DO NOT swap this for the swiftwasm/swift GitHub release; that bundle
+      # installs under a different identifier
+      # (`swift-wasm-6.3-RELEASE-wasm32-unknown-wasip1`) and would break the
+      # `--swift-sdk` flag in package.json.
+      - name: Install SwiftWasm SDK 6.3.1
+        run: |
+          swift sdk install \
+            https://download.swift.org/swift-6.3.1-release/wasm-sdk/swift-6.3.1-RELEASE/swift-6.3.1-RELEASE_wasm.artifactbundle.tar.gz \
+            --checksum bd47baa20771f366d8beed7970afaa30742b2210097afd15f85427226d8f4cf2
+          swift sdk list
+
+      # Cache SwiftPM build artifacts and the Skip plugin's codegen output so
+      # re-runs skip the multi-minute first-build penalty. Keyed on
+      # Package.resolved + this workflow file, so any dep or toolchain change
+      # invalidates the cache.
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+            ~/.cache/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftpm-wasm-${{ hashFiles('Package.resolved', '.github/workflows/deploy-pages.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-wasm-
+
+      # Node is required for the Astro build; pin to 22 to match the project's
+      # engines constraint (>=22.12.0). withastro/action defaults to Node 24,
+      # so we provision Node ourselves before running it. setup-node also
+      # primes the npm cache for the `web/` lockfile.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      # Builds the WASM via SwiftPM and copies it to web/public/skip-chess-web.wasm.
+      # The TOOLCHAINS=org.swift.631202604131a prefix in the script is a macOS
+      # xcode-select shorthand (a .pkg CFBundleIdentifier) and is silently
+      # ignored on Linux — the active toolchain on Linux is whichever `swift`
+      # is first on PATH, which Swiftly has set to 6.3.1 above.
+      - name: Build SkipChessWeb WASM module
+        working-directory: web
+        run: npm run build:wasm
+
+      # withastro/action handles: lockfile detection (finds package-lock.json
+      # in ./web -> npm), install (runs `npm install`), Astro build, and
+      # uploads the `github-pages` artifact via
+      # actions/upload-pages-artifact@v5 from ./web/dist. We pinned Node above
+      # via actions/setup-node, so re-passing node-version here would just
+      # cause a redundant setup; we leave it to inherit Node 22 from PATH.
+      - name: Build Astro site and upload Pages artifact
+        uses: withastro/action@v6
+        with:
+          path: ./web
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    # The `github-pages` environment is required and auto-created by GitHub
+    # when Pages is configured with "GitHub Actions" as the source.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
