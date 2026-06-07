@@ -24,7 +24,15 @@ import type {
 // to live here before the TS split.
 export { PieceCode, pieceImageName } from "./types";
 
-const WORKER_URL = new URL("./chess-worker.ts", import.meta.url);
+// `?worker` is Vite's canonical worker import. At build time Vite bundles
+// chess-worker.ts into a `.js` chunk and returns a constructor — the
+// `new URL("./chess-worker.ts", import.meta.url)` pattern is tempting but
+// preserves the `.ts` extension on the output file, which GitHub Pages
+// serves with Content-Type: video/mp2t (the MPEG-TS MIME for *.ts),
+// causing the worker to fail to load in production with a bare error
+// Event. Local `npm run dev` masks this because Vite's dev server
+// transpiles TS with the right MIME.
+import ChessWorker from "./chess-worker.ts?worker";
 
 function emptySnapshot(): BoardSnapshot {
   return {
@@ -66,10 +74,7 @@ export class ChessEngine {
    * with the post-`_start` board state.
    */
   static async load(wasmUrl: string): Promise<ChessEngine> {
-    const worker = new Worker(WORKER_URL, {
-      type: "module",
-      name: "skip-chess-engine",
-    });
+    const worker = new ChessWorker();
     const engine = new ChessEngine(worker);
     engine._installMessagePump();
     const snapshot = (await engine._call("init", { wasmUrl })) as BoardSnapshot;
