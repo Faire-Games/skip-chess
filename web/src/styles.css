@@ -1,0 +1,777 @@
+/*
+ * Chess UI styles. The board is a CSS grid; pieces are absolute-positioned
+ * children of the squares with `background-image` set to the lichess SVG
+ * for that piece.
+ */
+
+:root {
+  --board-size: min(80vmin, 640px);
+  --square-size: calc(var(--board-size) / 8);
+  --color-light: #f0d9b5;
+  --color-dark: #b58863;
+  --color-highlight: rgba(50, 200, 50, 0.35);
+  --color-selected: rgba(255, 200, 0, 0.55);
+  --color-last-from: rgba(255, 255, 0, 0.30);
+  --color-last-to: rgba(255, 255, 0, 0.55);
+  --color-in-check: rgba(255, 60, 60, 0.55);
+  --color-text: #1c1a17;
+  --color-text-muted: #6b5e51;
+  --color-card-bg: #fbf7f0;
+  --color-card-border: #d4c3a4;
+  --color-page-bg: #ece2cc;
+  --color-accent: #4f6e44;
+  --color-accent-hover: #3d5635;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: var(--color-text);
+  background: var(--color-page-bg);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 1fr min-content 1fr;
+  gap: 2rem;
+  padding: 2rem clamp(1rem, 4vw, 4rem);
+  min-height: 100vh;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+}
+
+.app-shell h1 {
+  margin: 0 0 1rem 0;
+  font-weight: 600;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+.app-shell .subtitle {
+  margin: 0 0 1rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.menu-card,
+.sidebar-card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: 0 6px 16px rgba(60, 40, 20, 0.06);
+}
+
+.menu-card label {
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.menu-card select,
+.menu-card input[type=text] {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.4rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: white;
+  color: var(--color-text);
+}
+
+.menu-card .difficulty-elo {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.menu-card button {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 0.45rem;
+  background: var(--color-accent);
+  color: white;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.menu-card button:hover {
+  background: var(--color-accent-hover);
+}
+
+.menu-card .secondary {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-card-border);
+}
+
+.menu-card .secondary:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.board-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.board-side {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: var(--board-size);
+  gap: 0.75rem;
+  margin: 0.15rem 0;
+  min-height: 1.8rem;
+}
+
+.loading-row {
+  width: var(--board-size);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: 0.25rem;
+}
+
+.captures {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.05rem;
+}
+
+.capture-piece {
+  width: 1.4rem;
+  height: 1.4rem;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex: 0 0 auto;
+  /* slight overlap so a queen's worth of pawns fits comfortably */
+  margin-right: -0.45rem;
+}
+
+/* The "+N" material advantage badge sits at the right end of the
+ * captures row whose side is leading. */
+.material-advantage {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  margin-left: 0.7rem;
+  font-weight: 600;
+}
+
+.clock {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 1.2rem;
+  min-width: 5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.clock.running {
+  color: var(--color-text);
+  background: white;
+  box-shadow: 0 0 0 2px var(--color-accent) inset;
+}
+
+.board {
+  width: var(--board-size);
+  height: var(--board-size);
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(60, 40, 20, 0.20);
+  user-select: none;
+  touch-action: none;
+}
+
+.square {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.square.light {
+  background: var(--color-light);
+}
+
+.square.dark {
+  background: var(--color-dark);
+}
+
+.square .coord-label {
+  position: absolute;
+  font-size: 0.7rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.square .rank-label {
+  top: 0.15rem;
+  left: 0.25rem;
+}
+
+.square .file-label {
+  bottom: 0.1rem;
+  right: 0.3rem;
+}
+
+.square.light .coord-label {
+  color: var(--color-dark);
+}
+
+.square.dark .coord-label {
+  color: var(--color-light);
+}
+
+.square.highlight::after {
+  content: "";
+  position: absolute;
+  inset: 25%;
+  background: var(--color-highlight);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.square.highlight:has(.piece)::after {
+  inset: 8%;
+  background: transparent;
+  border: 4px solid var(--color-highlight);
+  border-radius: 50%;
+}
+
+.square.selected {
+  background-color: var(--color-selected) !important;
+}
+
+.square.last-from {
+  background-color: var(--color-last-from) !important;
+}
+
+.square.last-to {
+  background-color: var(--color-last-to) !important;
+}
+
+.square.in-check {
+  background-color: var(--color-in-check) !important;
+}
+
+.piece {
+  width: 92%;
+  height: 92%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: grab;
+}
+
+.piece.dragging {
+  cursor: grabbing;
+}
+
+.sidebar-card h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.status {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.eval {
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  min-height: 1.3em;
+}
+
+.move-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  max-height: 28rem;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.move-list li {
+  padding: 0.15rem 0.4rem;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 0.25rem;
+}
+
+.move-list li[data-fullmove]::before {
+  content: attr(data-fullmove) ".";
+  color: var(--color-text-muted);
+  margin-right: 0.35rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.toolbar button {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.35rem;
+  background: white;
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.toolbar button:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.footer {
+  margin-top: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.footer a {
+  color: var(--color-accent);
+}
+
+/* ─────────────────────────────────────────────────  Game-result banner
+ *
+ * Shown BELOW the board when the game ends — never covering the final
+ * position so the player can examine it. Horizontal layout: icon |
+ * title + reason | actions (Replay, New Game).
+ */
+
+.board-area {
+  position: relative;
+  width: var(--board-size);
+  height: var(--board-size);
+}
+
+.game-result-banner {
+  width: var(--board-size);
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.6rem;
+  box-shadow: 0 4px 12px rgba(60, 40, 20, 0.12);
+  margin-top: 0.35rem;
+  animation: gameResultFade 0.25s ease;
+}
+
+.game-result-banner[hidden] {
+  display: none;
+}
+
+.game-result-icon {
+  font-size: 2rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.game-result-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-result-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+}
+
+.game-result-reason {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin: 0.1rem 0 0;
+}
+
+.game-result-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
+.game-result-actions button {
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease;
+}
+
+.game-result-actions .primary {
+  background: var(--color-accent);
+  color: white;
+}
+
+.game-result-actions .primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.game-result-actions .secondary {
+  background: transparent;
+  border-color: var(--color-card-border);
+  color: var(--color-text);
+}
+
+.game-result-actions .secondary:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.game-result-actions button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@keyframes gameResultFade {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Status-specific accent stripes on the left edge so the result reads
+ * at a glance: white-tinted, black-tinted, or neutral for draws. */
+.game-result-banner[data-result="white"] {
+  border-left: 4px solid var(--color-accent);
+}
+.game-result-banner[data-result="black"] {
+  border-left: 4px solid #2b2118;
+}
+.game-result-banner[data-result="draw"] {
+  border-left: 4px solid var(--color-card-border);
+}
+
+/* A checkmated king pulses red so the cause of the result reads at a
+ * glance even before the user looks at the banner. */
+@keyframes mateKingPulse {
+  0%, 100% { background-color: rgba(255, 60, 60, 0.55); }
+  50%      { background-color: rgba(255, 60, 60, 0.85); }
+}
+
+body.game-ended .square.in-check {
+  animation: mateKingPulse 1.4s ease-in-out infinite;
+}
+
+/* ─────────────────────────────────────────────────  Replay panel
+ *
+ * Shown beneath the board when the user enters replay mode (post-game).
+ * The slider + step buttons scrub through `moveHistory`; the board
+ * renders the position at the chosen ply.
+ */
+
+.replay-panel {
+  width: var(--board-size);
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  box-shadow: 0 2px 8px rgba(60, 40, 20, 0.08);
+}
+
+.replay-panel[hidden] {
+  display: none;
+}
+
+.replay-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.replay-row-bottom {
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.replay-step {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 0.35rem;
+  border: 1px solid var(--color-card-border);
+  background: white;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+
+.replay-step:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.replay-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.replay-slider {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0.2rem;
+  accent-color: var(--color-accent);
+}
+
+.replay-counter {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.replay-move-label {
+  flex: 1;
+  text-align: center;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--color-text);
+}
+
+.replay-panel .secondary {
+  padding: 0.35rem 0.8rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-card-border);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.replay-panel .secondary:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* When the user is scrubbing, dim the move-list entries that are AFTER
+ * the current ply so the visualization matches the board. */
+.move-list li.replay-current {
+  background: var(--color-accent);
+  color: white;
+  border-radius: 0.25rem;
+}
+
+.move-list li.replay-future {
+  opacity: 0.35;
+}
+
+/* Disable board input while replay mode is active. */
+body.replay-mode .board {
+  pointer-events: none;
+}
+body.replay-mode .toolbar button {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ───────────────────────────────────────────  Engine thinking state
+ *
+ * `body.engine-thinking` is added by the UI right before WASM blocks for
+ * the chess engine search and removed after the response is rendered.
+ * The cursor turns into a busy spinner and a spinning chip overlays the
+ * top-right of the board so the player has an immediate visual signal
+ * that the page will be momentarily unresponsive.
+ */
+
+body.engine-thinking {
+  cursor: progress;
+}
+
+body.engine-thinking .board {
+  pointer-events: none;
+}
+
+.board-area::after {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 2.5px solid rgba(255, 255, 255, 0.6);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+
+body.engine-thinking .board-area::after {
+  opacity: 1;
+  transform: scale(1);
+  animation: engineThinkSpin 0.9s linear infinite;
+}
+
+@keyframes engineThinkSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Tweak the "Engine is thinking…" status line so the text reads as
+ * "we're busy" rather than blending in with the regular eval caption. */
+body.engine-thinking .eval {
+  color: var(--color-accent);
+  font-style: italic;
+}
+
+body.fullscreen.engine-thinking .board-area::after {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.85);
+}
+
+/* ─────────────────────────────────────────────────  Fullscreen toggle */
+
+.fullscreen-toggle {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.5rem;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.fullscreen-toggle:hover {
+  background: white;
+  transform: scale(1.05);
+}
+
+.fullscreen-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ───────────────────────────────────────────  Fullscreen-mode layout
+ *
+ * Activated by `body.fullscreen` (set by the FS toggle). Everything
+ * outside the board column collapses to zero so the player sees only the
+ * board, captures, clocks (if a timed game), and the toggle button.
+ */
+
+body.fullscreen {
+  background: #2a2218;
+}
+
+body.fullscreen .app-shell {
+  grid-template-columns: 1fr;
+  padding: 0;
+  min-height: 100vh;
+  align-items: center;
+  justify-items: center;
+}
+
+body.fullscreen .app-shell > *:not(.board-column) {
+  display: none;
+}
+
+/* Hide all the non-essentials inside the board column. */
+body.fullscreen .loading-row,
+body.fullscreen .clock.untimed,
+body.fullscreen .replay-panel {
+  display: none;
+}
+
+body.fullscreen .board-column {
+  --board-size: min(94vmin, 88vh);
+  gap: 0.4rem;
+}
+
+body.fullscreen .board-side {
+  margin: 0;
+}
+
+body.fullscreen .fullscreen-toggle {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body.fullscreen .fullscreen-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body.fullscreen .clock {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body.fullscreen .clock.running {
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+}
+
+body.fullscreen .material-advantage {
+  color: rgba(255, 255, 255, 0.6);
+}

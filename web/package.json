@@ -1,0 +1,27 @@
+{
+  "name": "skip-chess-web",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build:wasm": "TOOLCHAINS=org.swift.631202604131a swift build -c release --swift-sdk swift-6.3.1-RELEASE_wasm --package-path .. --product SkipChessWeb && cp ../.build/wasm32-unknown-wasip1/release/SkipChessWeb.wasm public/skip-chess-web.wasm",
+    "test:wasm": "node scripts/smoketest.mjs",
+    "test:browser": "node scripts/browser-test.mjs",
+    "screenshot": "node scripts/screenshot.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
+    "astro": "^6.4.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "puppeteer": "^25.1.0",
+    "typescript": "^6.0.3"
+  }
+}
