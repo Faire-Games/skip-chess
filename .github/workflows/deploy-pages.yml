@@ -15,6 +15,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # PRs run the build job for early-warning CI — the deploy job is gated
+  # on event type below so PR builds never publish to the live site.
+  pull_request:
   workflow_dispatch:
 
 # OIDC token is required by actions/deploy-pages so it can verify the
@@ -27,9 +30,11 @@ permissions:
 
 # Pages convention: let in-flight deploys finish rather than be cancelled by a
 # newer push, otherwise the live site can end up in an inconsistent state.
+# Scope by ref so each PR has its own queue and doesn't fight with main's
+# Pages deploys; cancel superseded PR builds (fresh push = obsolete build).
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -149,6 +154,10 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
+    # Only push-to-main and manual dispatches publish; PR builds stop after
+    # the build job above. This is what gives PRs CI signal (build broke?)
+    # without ever touching the live site.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # The `github-pages` environment is required and auto-created by GitHub
     # when Pages is configured with "GitHub Actions" as the source.
