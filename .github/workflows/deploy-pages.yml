@@ -154,10 +154,10 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    # TEMP: deploy on PRs too while we shake out the workflow end-to-end.
-    # Restore `if: github.event_name != 'pull_request'` once the pipeline
-    # is proven so PR builds stop publishing to the live Pages URL.
-    # if: github.event_name != 'pull_request'
+    # Only push-to-main and manual dispatches publish; PR builds stop after
+    # the build job above. This is what gives PRs CI signal (build broke?)
+    # without ever touching the live site.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # The `github-pages` environment is required and auto-created by GitHub
     # when Pages is configured with "GitHub Actions" as the source.
