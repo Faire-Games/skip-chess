@@ -5,6 +5,24 @@ chess model, generic engine protocols, and a bundled alpha-beta engine using
 PeSTO evaluation. Builds natively for Swift on iOS/macOS and transpiles
 losslessly to Kotlin for Android.
 
+## Play
+
+Try Skip Chess in your browser at **[skipchess.net](https://skipchess.net)** —
+the WebAssembly build powered by [`SkipChessWeb`](web/) — or install the
+native app:
+
+<p>
+  <a href="https://apps.apple.com/app/id6761661340">
+    <img src="https://appfair.net/badges/en/apple-app-store.svg"
+         alt="Download on the App Store" height="40">
+  </a>
+  &nbsp;
+  <a href="https://play.google.com/store/apps/details?id=org.appfair.app.Faire_Games">
+    <img src="https://appfair.net/badges/en/google-play-store.svg"
+         alt="Get it on Google Play" height="60">
+  </a>
+</p>
+
 The package is organized as four library modules plus a WebAssembly
 executable that powers the bundled browser front-end:
 
@@ -261,6 +279,148 @@ let engine = AlphaBetaEngine(
     transpositionTableEntries: 1 << 18
 )
 ```
+
+## Wire Protocol (`SkipChessWeb`)
+
+`SkipChessWeb` (the WebAssembly executable target) exposes a small
+Lichess-style JSON wire protocol that the web front-end uses to talk to
+the engine. The protocol is transport-agnostic — the bundled
+[`web/`](web/) client forwards envelopes to the WASM module through a
+Web Worker, but the same `Socket` class
+([`web/src/socket.ts`](web/src/socket.ts)) could be pointed at a real
+`wss://socket.lichess.ovh/...` connection without other code changes.
+
+Server-side dispatch lives in
+[`Sources/SkipChessEngine/RoundSession.swift`](Sources/SkipChessEngine/RoundSession.swift);
+the WASM C-ABI wrapping it (`chess_protocol_*` exports) is in
+[`Sources/SkipChessWeb/`](Sources/SkipChessWeb/).
+
+### Envelopes
+
+Every wire frame is either a bare-string ping/pong (`"p"` / `"0"`), or a
+JSON envelope with the following shape:
+
+```json
+{ "t": "<type>", "d": <payload>, "v": <version>, "a": <ackId>, "l": <lag> }
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `t`   | yes      | Message type (see tables below). |
+| `d`   | no       | Type-specific payload (object, number, or omitted). |
+| `v`   | no       | Monotonically increasing version. The client drops duplicates and queues out-of-order envelopes until the missing intermediate versions arrive. |
+| `a`   | no       | Ack id. The server replies with `{"t":"ack","d":<id>}`. The client resends every 2.5 s until acked. |
+| `l`   | no       | Client-reported lag estimate in centiseconds. Sent on every 10th keep-alive ping. |
+
+### Client → Server messages
+
+| Type      | Payload (`d`)        | Ackable | Notes |
+|-----------|----------------------|---------|-------|
+| `"p"`     | bare string `"p"`    | —       | Keep-alive ping (every 2.5 s). |
+| `move`    | `{ "u": "<uci>" }`   | optional | Submit a human move. `u` is the UCI of the move (e.g. `"e2e4"`, `"e7e8q"` for a queen-promotion). |
+| `resign`  | none                 | yes     | The side currently to move resigns. |
+
+### Server → Client messages
+
+| Type           | Payload (`d`)                            | Versioned | Notes |
+|----------------|------------------------------------------|-----------|-------|
+| `"0"`          | bare string                              | —         | Pong, in response to a client `"p"`. |
+| `move`         | [`MovePayload`](#movepayload)            | yes       | A move was just made — or the boot snapshot (`uci: ""`) delivered after `chess_protocol_init`. |
+| `endData`      | `{ "status": <status>, "winner"?: "white" \| "black" }` | yes | Game ended. `winner` is omitted on a draw. |
+| `drawOffer`    | `"white"` / `"black"` (or omitted)        | no        | A draw was offered (or withdrawn). |
+| `takebackOffers` | `{ "white": <bool>, "black": <bool> }` | no        | Current takeback-offer state for both sides. |
+| `ack`          | `<id: number>`                            | no        | Acknowledgement of an ackable client message. |
+| `resync`       | none                                      | no        | Client should refetch authoritative state — typically issued after the server rejects an illegal client message. |
+| `crowd`        | `{ "white": <bool>, "black": <bool>, "nb": <int> }` | no | Spectator counts. Always zero from this engine; included for Lichess-shape compatibility. |
+
+#### `MovePayload`
+
+```ts
+interface MovePayload {
+  uci: string;       // last move in UCI, or "" for the boot snapshot
+  san?: string;      // optional SAN — engine omits this; included for forward-compat
+  fen: string;       // FEN of the position AFTER this move
+  ply: number;       // half-move count
+  clock?: {          // omitted on untimed games
+    white: number;   // seconds remaining
+    black: number;
+    lag?: number;    // server lag estimate in centiseconds
+  };
+  check?: boolean;            // side to move is in check
+  dests?: { [from: string]: string[] };  // legal moves grouped by origin square
+  promotion?: string;         // "q" / "r" / "b" / "n" if the move was a promotion
+  status?:
+    | "mate" | "resign" | "stalemate" | "draw"
+    | "insufficientMaterial" | "fiftyMoves"
+    | "threefoldRepetition" | "outoftime";
+  winner?: "white" | "black";
+}
+```
+
+The very first envelope after `chess_protocol_init` is a `move` with
+`uci: ""` — the **boot snapshot** that carries the initial FEN, both
+clocks (full initial values), and the dest map. Clients populate both
+clocks from this snapshot; subsequent move envelopes carry only the
+moving side's authoritative clock value.
+
+### Ordering, acks, and resync
+
+`v` is the protocol's ordering mechanism. The client keeps a
+`lastVersion` cursor and:
+
+* drops any envelope with `v <= lastVersion` as a duplicate;
+* queues an envelope with `v > lastVersion + 1` and processes it only
+  after the missing intermediate versions arrive;
+* processes `v == lastVersion + 1` immediately and drains any newly
+  processable queued envelopes.
+
+Ackable client messages (e.g. `resign`) carry an `a` field. The client
+retains them in a queue and resends every 2.5 s until the server's
+`{ "t": "ack", "d": <id> }` clears the entry.
+
+A server `{ "t": "resync" }` resets `lastVersion` to 0 and asks the
+client to drop local optimistic state.
+
+### Engine pump: `protocol_send` vs `protocol_pump_engine`
+
+A subtle implementation detail of the WASM C-ABI: `chess_protocol_send`
+and `chess_protocol_pump_engine` are two **separate** entry points.
+
+* `chess_protocol_send` ingests one client envelope, processes it
+  synchronously, and returns the **resulting server envelopes from the
+  user's action alone** (the move event for an accepted human move, or a
+  `resync` for an illegal one). It does **not** run the engine.
+* `chess_protocol_pump_engine` runs the engine search (the
+  multi-second blocking call) when it is the engine's turn, and returns
+  the engine's move envelope.
+
+The Web Worker calls them sequentially: send → render the human move →
+pump_engine. Splitting them lets the worker paint the user's move
+**before** the engine search blocks the worker thread, so the user
+sees the board update immediately while the engine thinks. Combined
+with the worker living off the main thread, the page itself stays
+fully responsive — clocks tick, the UI repaints, the menu accepts
+input — for the entire duration of the engine search.
+
+### Clock accounting
+
+The protocol's clock model is asymmetric on purpose:
+
+* **Engine clock:** authoritatively tracked WASM-side. The
+  `RoundSession` deducts the engine's search wall-time from its
+  remaining clock on every `pump_engine` call, then applies the
+  configured increment. The new value is included in the engine's
+  outbound `move` envelope's `d.clock`.
+* **Human clock:** tracked JS-side via a `setInterval` tick.
+  `chess_protocol_init` seeds both clocks WASM-side to the same
+  `initialClockMs`, but only the engine-side value is updated thereafter.
+  The JS client applies the configured increment locally when its own
+  move is accepted.
+
+This split avoids round-trip latency on the human's clock display
+(every tick would require a worker message) while keeping the
+engine's deduction accurate to the millisecond — the WASM owns the
+search clock because the worker is the one timing it.
 
 ## Implementing a Custom Engine
 

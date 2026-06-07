@@ -99,7 +99,8 @@ export type WorkerRequest =
     }
   | { id: number; type: "protocolInitialSnapshot" }
   | { id: number; type: "protocolSend"; wire: string }
-  | { id: number; type: "protocolPumpEngine" };
+  | { id: number; type: "protocolPumpEngine" }
+  | { id: number; type: "bestMove" };
 
 /** Discriminated worker response. `id` correlates with `WorkerRequest`. */
 export type WorkerResponse =

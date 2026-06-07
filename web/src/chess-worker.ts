@@ -50,6 +50,8 @@ interface ChessWasmExports {
   chess_protocol_initial_snapshot: () => number;
   chess_protocol_send: (length: number) => number;
   chess_protocol_pump_engine: () => number;
+
+  chess_engine_best_move: () => number;
 }
 
 let instance: WebAssembly.Instance | null = null;
@@ -236,6 +238,15 @@ self.addEventListener("message", async (ev: MessageEvent<WorkerRequest>) => {
       case "protocolPumpEngine": {
         const replyLen = getExports().chess_protocol_pump_engine();
         result = { replies: splitWireReplies(replyLen), snapshot: takeSnapshot() };
+        break;
+      }
+
+      case "bestMove": {
+        // Read-only: searches from the current position, returns the UCI
+        // of the engine's preferred move. Does NOT mutate the board or
+        // the RoundSession — safe to call any time during a game.
+        const len = getExports().chess_engine_best_move();
+        result = len > 0 ? readOutput(len) : "";
         break;
       }
     }

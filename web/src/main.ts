@@ -4,13 +4,27 @@
 // Page entry point — wires DOM elements to the ChessGameUI driver and
 // resumes the most recent game from localStorage if one is present.
 
-import { ChessGameUI, DIFFICULTIES } from "./chess-ui";
+import { ChessGameUI } from "./chess-ui";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing required element: #${id}`);
   return el as T;
 };
+
+/** Same as `$`, but for SVG nodes — needed because TS distinguishes
+ *  `HTMLElement` from `SVGElement` and the hint overlay is a real SVG. */
+const $svg = (id: string): SVGElement => {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing required SVG element: #${id}`);
+  return el as unknown as SVGElement;
+};
+
+const colorSelect = $<HTMLSelectElement>("opt-color");
+const difficultySelect = $<HTMLSelectElement>("opt-difficulty");
+const timeSelect = $<HTMLSelectElement>("opt-time");
+const startGameBtn = $<HTMLButtonElement>("btn-start-game");
+const loadingIndicator = $("loading-indicator");
 
 const ui = new ChessGameUI({
   boardEl: $("board"),
@@ -21,9 +35,25 @@ const ui = new ChessGameUI({
   whiteCapturesEl: $("captures-white"),
   blackCapturesEl: $("captures-black"),
   evalEl: $("eval"),
+  fenValueEl: $("fen-value"),
+  copyFENBtn: $<HTMLButtonElement>("btn-copy-fen"),
   undoBtn: $<HTMLButtonElement>("btn-undo"),
   resignBtn: $<HTMLButtonElement>("btn-resign"),
-  gameOverOverlayEl: $("game-over-banner"),
+  hintBtn: $<HTMLButtonElement>("btn-hint"),
+  hintOverlayEl: $svg("hint-overlay"),
+  hintArrowEl: $svg("hint-arrow"),
+  lastMoveOverlayEl: $svg("last-move-overlay"),
+  lastMoveArrowEl: $svg("last-move-arrow"),
+  lastMoveArrowToggle: $<HTMLInputElement>("opt-last-move-arrow"),
+  newGameSectionEl: $("new-game-section"),
+  colorSelect,
+  difficultySelect,
+  timeSelect,
+  startGameBtn,
+  statusLiveEl: $("status-live"),
+  statusGameOverEl: $("status-game-over"),
+  inGameActionsEl: $("actions-in-game"),
+  gameOverActionsEl: $("actions-game-over"),
   gameOverResultEl: $("game-over-result"),
   gameOverReasonEl: $("game-over-reason"),
   gameOverIconEl: $("game-over-icon"),
@@ -32,31 +62,55 @@ const ui = new ChessGameUI({
   replaySliderEl: $<HTMLInputElement>("replay-slider"),
   replayCounterEl: $("replay-counter"),
   replayMoveLabelEl: $("replay-move-label"),
-  replayFirstBtn: $<HTMLButtonElement>("btn-replay-first"),
   replayPrevBtn: $<HTMLButtonElement>("btn-replay-prev"),
   replayNextBtn: $<HTMLButtonElement>("btn-replay-next"),
-  replayLastBtn: $<HTMLButtonElement>("btn-replay-last"),
   replayExitBtn: $<HTMLButtonElement>("btn-replay-exit"),
-});
-
-const colorSelect = $<HTMLSelectElement>("opt-color");
-const difficultySelect = $<HTMLSelectElement>("opt-difficulty");
-const timeSelect = $<HTMLSelectElement>("opt-time");
-const difficultyDetail = $("difficulty-detail");
-const loadingIndicator = $("loading-indicator");
-
-// "New Game" button on the overlay restarts with the user's current
-// menu selections.
-$<HTMLButtonElement>("btn-game-over-new").addEventListener("click", () => {
-  void ui.startNewGame({
-    humanColor: colorSelect.value as "white" | "black" | "random",
-    difficultyId: difficultySelect.value,
-    timeControlId: timeSelect.value,
-  });
+  replayResumeBtn: $<HTMLButtonElement>("btn-replay-resume"),
 });
 
 // Expose for in-browser testing convenience.
 (window as unknown as { __chess_ui: ChessGameUI }).__chess_ui = ui;
+
+// ─────────────────────────────────────────────────  Theme picker
+//
+// Light / System / Dark segmented control. The user's choice persists
+// in localStorage; when set to "system", the page follows the OS
+// `prefers-color-scheme`. We toggle `body.theme-{light|system|dark}`
+// so the CSS variable overrides kick in.
+
+type ThemeChoice = "light" | "system" | "dark";
+const THEME_KEY = "skip-chess.theme.v1";
+
+const themeButtons: Record<ThemeChoice, HTMLButtonElement> = {
+  light: $<HTMLButtonElement>("btn-theme-light"),
+  system: $<HTMLButtonElement>("btn-theme-system"),
+  dark: $<HTMLButtonElement>("btn-theme-dark"),
+};
+
+function readSavedTheme(): ThemeChoice {
+  try {
+    const v = window.localStorage.getItem(THEME_KEY);
+    if (v === "light" || v === "system" || v === "dark") return v;
+  } catch { /* private mode etc. — fall through */ }
+  return "system";
+}
+
+function applyTheme(choice: ThemeChoice): void {
+  const body = document.body;
+  body.classList.toggle("theme-light", choice === "light");
+  body.classList.toggle("theme-system", choice === "system");
+  body.classList.toggle("theme-dark", choice === "dark");
+  for (const key of ["light", "system", "dark"] as ThemeChoice[]) {
+    themeButtons[key].setAttribute("aria-checked",
+      key === choice ? "true" : "false");
+  }
+  try { window.localStorage.setItem(THEME_KEY, choice); } catch { /* ignore */ }
+}
+
+for (const key of ["light", "system", "dark"] as ThemeChoice[]) {
+  themeButtons[key].addEventListener("click", () => applyTheme(key));
+}
+applyTheme(readSavedTheme());
 
 // ─────────────────────────────────────────────────  Fullscreen toggle
 //
@@ -88,8 +142,13 @@ function updateFullscreenIcons(): void {
   if (enterIcon) (enterIcon as HTMLElement).style.display = inFs ? "none" : "";
   if (exitIcon) (exitIcon as HTMLElement).style.display = inFs ? "" : "none";
   fullscreenBtn.title = inFs ? "Exit fullscreen" : "Enter fullscreen";
-  // Recompute clock positioning after the layout shift.
-  if (ui && ui.engine) ui.renderClocks();
+  // Recompute clock positioning + the JS-driven `--fullscreen-board-size`
+  // after the layout shift, so the board fits whatever space is left
+  // beside the banner / replay panel.
+  if (ui && ui.engine) {
+    ui.renderClocks();
+    ui._updateFullscreenBoardSize();
+  }
 }
 
 fullscreenBtn.addEventListener("click", () => {
@@ -117,45 +176,19 @@ document.addEventListener("keydown", (ev) => {
   }
 });
 
-function updateDifficultyDetail(): void {
-  const id = difficultySelect.value;
-  const d = DIFFICULTIES.find((x) => x.id === id);
-  if (d) {
-    difficultyDetail.textContent =
-      `≈ ${d.elo} ELO · depth ${d.depth} · ${d.timeMs} ms/move`;
-  }
-}
-
 /** Reflects the current ui settings in the form controls. */
 function syncMenuFromUI(): void {
   colorSelect.value = ui.humanColor;
   difficultySelect.value = ui.difficulty.id;
   timeSelect.value = ui.timeControl.id;
-  updateDifficultyDetail();
 }
 
-difficultySelect.addEventListener("change", updateDifficultyDetail);
-updateDifficultyDetail();
-
-$<HTMLButtonElement>("btn-start-game").addEventListener("click", () => {
+startGameBtn.addEventListener("click", () => {
   void ui.startNewGame({
     humanColor: colorSelect.value as "white" | "black" | "random",
     difficultyId: difficultySelect.value,
     timeControlId: timeSelect.value,
   });
-});
-
-$<HTMLButtonElement>("btn-load-fen").addEventListener("click", () => {
-  const fen = window.prompt(
-    "Paste a FEN string to load:",
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-  );
-  if (!fen) return;
-  void (async () => {
-    if (!(await ui.loadFENAndReset(fen))) {
-      window.alert("That FEN was rejected by the parser.");
-    }
-  })();
 });
 
 try {
@@ -178,6 +211,9 @@ try {
     syncMenuFromUI();
     loadingIndicator.textContent = "Engine ready. Click Start.";
   }
+  // A game is now in progress (either resumed or just started). The
+  // button restarts the round when clicked, so re-label it accordingly.
+  startGameBtn.textContent = "New game";
 } catch (err) {
   loadingIndicator.textContent = "Failed to load engine: " + String(err);
   console.error(err);

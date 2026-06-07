@@ -46,13 +46,24 @@ export const DIFFICULTIES: DifficultyPreset[] = [
   { id: "master", label: "Master", elo: 2100, depth: 8, timeMs: 5000 },
 ];
 
-/** Time controls offered by the menu. */
+/** Time controls offered by the menu — matches Lichess's standard
+ *  bullet / blitz / rapid / classical brackets. Pre-existing IDs
+ *  (`blitz3`, `blitz5`, `rapid10`, `classical`) are preserved so saved
+ *  games from earlier versions resume on the same setting. */
 export const TIME_CONTROLS: TimeControlPreset[] = [
-  { id: "untimed",   label: "Untimed",          initialSeconds: -1,   incrementSeconds: 0 },
-  { id: "blitz3",    label: "Blitz 3+2",        initialSeconds: 180,  incrementSeconds: 2 },
-  { id: "blitz5",    label: "Blitz 5+0",        initialSeconds: 300,  incrementSeconds: 0 },
-  { id: "rapid10",   label: "Rapid 10+0",       initialSeconds: 600,  incrementSeconds: 0 },
-  { id: "classical", label: "Classical 30+30",  initialSeconds: 1800, incrementSeconds: 30 },
+  { id: "untimed",     label: "Untimed",          initialSeconds: -1,   incrementSeconds: 0 },
+  { id: "bullet1",     label: "Bullet 1+0",       initialSeconds: 60,   incrementSeconds: 0 },
+  { id: "bullet2",     label: "Bullet 2+1",       initialSeconds: 120,  incrementSeconds: 1 },
+  { id: "blitz3-0",    label: "Blitz 3+0",        initialSeconds: 180,  incrementSeconds: 0 },
+  { id: "blitz3",      label: "Blitz 3+2",        initialSeconds: 180,  incrementSeconds: 2 },
+  { id: "blitz5",      label: "Blitz 5+0",        initialSeconds: 300,  incrementSeconds: 0 },
+  { id: "blitz5-3",    label: "Blitz 5+3",        initialSeconds: 300,  incrementSeconds: 3 },
+  { id: "rapid10",     label: "Rapid 10+0",       initialSeconds: 600,  incrementSeconds: 0 },
+  { id: "rapid10-5",   label: "Rapid 10+5",       initialSeconds: 600,  incrementSeconds: 5 },
+  { id: "rapid15",     label: "Rapid 15+10",      initialSeconds: 900,  incrementSeconds: 10 },
+  { id: "classical30", label: "Classical 30+0",   initialSeconds: 1800, incrementSeconds: 0 },
+  { id: "classical30-20", label: "Classical 30+20", initialSeconds: 1800, incrementSeconds: 20 },
+  { id: "classical",   label: "Classical 30+30",  initialSeconds: 1800, incrementSeconds: 30 },
 ];
 
 export interface ChessGameUIOptions {
@@ -66,25 +77,55 @@ export interface ChessGameUIOptions {
   /** Tray for the white pieces Black has captured. */
   blackCapturesEl?: HTMLElement | null;
   evalEl: HTMLElement;
+  /** Read-only display of the current FEN. */
+  fenValueEl?: HTMLElement | null;
+  /** Copy-to-clipboard button next to the FEN display. */
+  copyFENBtn?: HTMLButtonElement | null;
   undoBtn: HTMLButtonElement;
   resignBtn: HTMLButtonElement;
-  // Game-result banner surfaces (shown below the board on game end).
-  gameOverOverlayEl?: HTMLElement | null;
+  /** "Hint" button — asks the engine for the best move + draws an
+   *  arrow over the board. */
+  hintBtn?: HTMLButtonElement | null;
+  /** SVG overlay element (`<svg>`) that hosts the hint arrow. */
+  hintOverlayEl?: SVGElement | null;
+  /** The actual `<line>` whose x1/y1/x2/y2 the hint code updates. */
+  hintArrowEl?: SVGElement | null;
+  /** SVG overlay that hosts the "last move" arrow (different colour). */
+  lastMoveOverlayEl?: SVGElement | null;
+  lastMoveArrowEl?: SVGElement | null;
+  /** Checkbox that toggles the last-move arrow. */
+  lastMoveArrowToggle?: HTMLInputElement | null;
+  // New-Game section controls. The class disables these while a game
+  // is in progress and re-enables them once a result lands.
+  newGameSectionEl?: HTMLElement | null;
+  colorSelect?: HTMLSelectElement | null;
+  difficultySelect?: HTMLSelectElement | null;
+  timeSelect?: HTMLSelectElement | null;
+  startGameBtn?: HTMLButtonElement | null;
+  // Status-panel children. The status panel swaps content + actions
+  // between "live game" and "game over" states.
+  statusLiveEl?: HTMLElement | null;
+  statusGameOverEl?: HTMLElement | null;
+  inGameActionsEl?: HTMLElement | null;
+  gameOverActionsEl?: HTMLElement | null;
+  // Game-over indicator surfaces — used to be a freestanding banner;
+  // they're now children of `statusGameOverEl` inside the sidebar.
   gameOverResultEl?: HTMLElement | null;
   gameOverReasonEl?: HTMLElement | null;
   gameOverIconEl?: HTMLElement | null;
-  /** "Replay" button on the result banner. */
+  /** "Replay" button in the game-over actions row. */
   gameOverReplayBtn?: HTMLButtonElement | null;
   // Replay-panel surfaces (shown when the user enters replay mode).
   replayPanelEl?: HTMLElement | null;
   replaySliderEl?: HTMLInputElement | null;
   replayCounterEl?: HTMLElement | null;
   replayMoveLabelEl?: HTMLElement | null;
-  replayFirstBtn?: HTMLButtonElement | null;
   replayPrevBtn?: HTMLButtonElement | null;
   replayNextBtn?: HTMLButtonElement | null;
-  replayLastBtn?: HTMLButtonElement | null;
   replayExitBtn?: HTMLButtonElement | null;
+  /** "Resume" button in the replay panel — pick up the game from the
+   *  chosen ply rather than restoring the original final state. */
+  replayResumeBtn?: HTMLButtonElement | null;
 }
 
 export interface StartNewGameOptions {
@@ -96,6 +137,12 @@ export interface StartNewGameOptions {
 export interface MoveHistoryEntry {
   san: string;
   fen: string;
+  /** White's clock (seconds) immediately AFTER this move was played.
+   *  `undefined` for moves saved before the field was added (replay
+   *  falls back to the time control's initial value). */
+  whiteClock?: number;
+  /** Black's clock (seconds) immediately AFTER this move was played. */
+  blackClock?: number;
 }
 
 interface LastMove {
@@ -120,6 +167,9 @@ interface SavedGameState {
 
 const STARTING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+/** localStorage key for the "Last Move Arrow" toggle. */
+const LAST_MOVE_ARROW_KEY = "skip-chess.last-move-arrow.v1";
 
 interface SearchInfo {
   mate: number;
@@ -146,9 +196,31 @@ export class ChessGameUI {
   private readonly whiteCapturesEl: HTMLElement | null;
   private readonly blackCapturesEl: HTMLElement | null;
   private readonly evalEl: HTMLElement;
+  private readonly fenValueEl: HTMLElement | null;
+  private readonly copyFENBtn: HTMLButtonElement | null;
   private readonly undoBtn: HTMLButtonElement;
   private readonly resignBtn: HTMLButtonElement;
-  private readonly gameOverOverlayEl: HTMLElement | null;
+  private readonly hintBtn: HTMLButtonElement | null;
+  private readonly hintOverlayEl: SVGElement | null;
+  private readonly hintArrowEl: SVGElement | null;
+  private readonly lastMoveOverlayEl: SVGElement | null;
+  private readonly lastMoveArrowEl: SVGElement | null;
+  private readonly lastMoveArrowToggle: HTMLInputElement | null;
+  private readonly colorSelect: HTMLSelectElement | null;
+  private readonly difficultySelect: HTMLSelectElement | null;
+  private readonly timeSelect: HTMLSelectElement | null;
+  private readonly startGameBtn: HTMLButtonElement | null;
+  /** True while the user has typed/pasted a FEN into the field that
+   *  differs from the engine's current FEN. The icon button morphs
+   *  into a "load" button while this is set. */
+  private fenDirty = false;
+  /** Whether the user has toggled "Last Move Arrow" on. Persisted in
+   *  localStorage under `LAST_MOVE_ARROW_KEY`. */
+  private lastMoveArrowEnabled = false;
+  private readonly statusLiveEl: HTMLElement | null;
+  private readonly statusGameOverEl: HTMLElement | null;
+  private readonly inGameActionsEl: HTMLElement | null;
+  private readonly gameOverActionsEl: HTMLElement | null;
   private readonly gameOverResultEl: HTMLElement | null;
   private readonly gameOverReasonEl: HTMLElement | null;
   private readonly gameOverIconEl: HTMLElement | null;
@@ -159,11 +231,10 @@ export class ChessGameUI {
   private readonly replaySliderEl: HTMLInputElement | null;
   private readonly replayCounterEl: HTMLElement | null;
   private readonly replayMoveLabelEl: HTMLElement | null;
-  private readonly replayFirstBtn: HTMLButtonElement | null;
   private readonly replayPrevBtn: HTMLButtonElement | null;
   private readonly replayNextBtn: HTMLButtonElement | null;
-  private readonly replayLastBtn: HTMLButtonElement | null;
   private readonly replayExitBtn: HTMLButtonElement | null;
+  private readonly replayResumeBtn: HTMLButtonElement | null;
 
   /** Last endData payload (kept so we can re-show the overlay on resume). */
   private _lastEndData: EndDataPayload | null = null;
@@ -174,12 +245,19 @@ export class ChessGameUI {
 
   /** True while the user is scrubbing through past moves. While set, the
    *  engine is showing a historical position and accepting no input. */
+  /** True while an engine search is in flight (move pump or Hint). Read
+   *  by `_renderActionButtonStates` to disable Hint mid-search. */
+  private _engineSearching = false;
   private replayMode = false;
   /** Ply index currently shown in replay mode (0 = initial position). */
   private replayPly = 0;
   /** Snapshot of `engine.currentFEN` at the moment replay was entered.
    *  Restored when the user exits replay so play resumes correctly. */
   private replayFinalFEN: string | null = null;
+  /** Live white clock at the moment replay was entered (restored on exit). */
+  private replayLiveWhiteClock: number = -1;
+  /** Live black clock at the moment replay was entered (restored on exit). */
+  private replayLiveBlackClock: number = -1;
 
   engine: ChessEngine | null = null;
   private socket: Socket | null = null;
@@ -224,13 +302,47 @@ export class ChessGameUI {
     this.whiteCapturesEl = options.whiteCapturesEl ?? null;
     this.blackCapturesEl = options.blackCapturesEl ?? null;
     this.evalEl = options.evalEl;
+    this.fenValueEl = options.fenValueEl ?? null;
+    this.copyFENBtn = options.copyFENBtn ?? null;
     this.undoBtn = options.undoBtn;
     this.resignBtn = options.resignBtn;
+    this.hintBtn = options.hintBtn ?? null;
+    this.hintOverlayEl = options.hintOverlayEl ?? null;
+    this.hintArrowEl = options.hintArrowEl ?? null;
+    this.lastMoveOverlayEl = options.lastMoveOverlayEl ?? null;
+    this.lastMoveArrowEl = options.lastMoveArrowEl ?? null;
+    this.lastMoveArrowToggle = options.lastMoveArrowToggle ?? null;
+    this.colorSelect = options.colorSelect ?? null;
+    this.difficultySelect = options.difficultySelect ?? null;
+    this.timeSelect = options.timeSelect ?? null;
+    this.startGameBtn = options.startGameBtn ?? null;
+
+    // Restore the user's Last Move Arrow preference.
+    try {
+      this.lastMoveArrowEnabled =
+        window.localStorage.getItem(LAST_MOVE_ARROW_KEY) === "1";
+    } catch { /* private mode etc. */ }
+    if (this.lastMoveArrowToggle) {
+      this.lastMoveArrowToggle.checked = this.lastMoveArrowEnabled;
+      this.lastMoveArrowToggle.addEventListener("change", () => {
+        this.lastMoveArrowEnabled = this.lastMoveArrowToggle!.checked;
+        try {
+          window.localStorage.setItem(
+            LAST_MOVE_ARROW_KEY,
+            this.lastMoveArrowEnabled ? "1" : "0",
+          );
+        } catch { /* ignore */ }
+        this._renderLastMoveArrow();
+      });
+    }
+    this.statusLiveEl = options.statusLiveEl ?? null;
+    this.statusGameOverEl = options.statusGameOverEl ?? null;
+    this.inGameActionsEl = options.inGameActionsEl ?? null;
+    this.gameOverActionsEl = options.gameOverActionsEl ?? null;
 
     // Optional game-over overlay surfaces. When present, an end-of-game
     // event (`endData`) populates them and unhides the overlay; starting
     // a new game hides it again.
-    this.gameOverOverlayEl = options.gameOverOverlayEl ?? null;
     this.gameOverResultEl = options.gameOverResultEl ?? null;
     this.gameOverReasonEl = options.gameOverReasonEl ?? null;
     this.gameOverIconEl = options.gameOverIconEl ?? null;
@@ -239,14 +351,48 @@ export class ChessGameUI {
     this.replaySliderEl = options.replaySliderEl ?? null;
     this.replayCounterEl = options.replayCounterEl ?? null;
     this.replayMoveLabelEl = options.replayMoveLabelEl ?? null;
-    this.replayFirstBtn = options.replayFirstBtn ?? null;
     this.replayPrevBtn = options.replayPrevBtn ?? null;
     this.replayNextBtn = options.replayNextBtn ?? null;
-    this.replayLastBtn = options.replayLastBtn ?? null;
     this.replayExitBtn = options.replayExitBtn ?? null;
+    this.replayResumeBtn = options.replayResumeBtn ?? null;
 
     this.undoBtn.addEventListener("click", () => { void this.undoUserMove(); });
     this.resignBtn.addEventListener("click", () => this.resign());
+    this.hintBtn?.addEventListener("click", () => { void this.showHint(); });
+
+    this.copyFENBtn?.addEventListener("click", () => { void this._copyOrLoadFEN(); });
+
+    // The FEN field is contenteditable. Watch for user edits so we can
+    // morph the adjacent icon button from "copy" into "load" once the
+    // contents drift from the engine's current FEN.
+    if (this.fenValueEl) {
+      this.fenValueEl.addEventListener("input", () => {
+        this.fenDirty = this._isFenFieldDirty();
+        this._renderFenButtonMode();
+      });
+      // contenteditable's default `paste` keeps formatting; force plain
+      // text and collapse whitespace so a multi-line clipboard paste
+      // becomes a single-line FEN.
+      this.fenValueEl.addEventListener("paste", (ev) => {
+        ev.preventDefault();
+        const ce = ev as ClipboardEvent;
+        const text = ce.clipboardData?.getData("text/plain") ?? "";
+        const cleaned = text.replace(/\s+/g, " ").trim();
+        // execCommand is deprecated but still the most reliable way to
+        // insert text at the caret inside contenteditable across
+        // browsers. The deprecation hint is acknowledged.
+        document.execCommand("insertText", false, cleaned);
+      });
+      // Escape reverts the field back to the engine's current FEN.
+      this.fenValueEl.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") {
+          ev.preventDefault();
+          this.fenDirty = false;
+          this.renderFEN();
+          (this.fenValueEl as HTMLElement).blur();
+        }
+      });
+    }
 
     this._installReplayHandlers();
 
@@ -257,6 +403,10 @@ export class ChessGameUI {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") this._saveState();
     });
+
+    // Keep the fullscreen board sized to fit the viewport on resize /
+    // orientation change. The handler is a no-op when not in fullscreen.
+    window.addEventListener("resize", () => this._updateFullscreenBoardSize());
   }
 
   // MARK: - Initialization
@@ -304,12 +454,15 @@ export class ChessGameUI {
     this.selectedSquare = null;
     this.highlightedSquares.clear();
     this.gameOver = false;
+    this._lastEndData = null;
     this.stopClock();
 
     this.renderBoard();
     this.renderClocks();
     this.renderMoves();
     this.updateStatus();
+    this._renderStatusPanelLayout();
+    this._clearHintArrow();
     this._saveState();
 
     // The initial snapshot already includes the engine's reply when
@@ -388,7 +541,6 @@ export class ChessGameUI {
         from: parseSquare(d.uci.slice(0, 2)),
         to: parseSquare(d.uci.slice(2, 4)),
       };
-      this.moveHistory.push({ san: d.uci, fen: d.fen });
     }
 
     // Clock synchronization. The server only authoritatively tracks the
@@ -420,6 +572,18 @@ export class ChessGameUI {
       } else {
         this.blackSecondsLeft += this.timeControl.incrementSeconds;
       }
+    }
+
+    // Push the history entry AFTER clock sync so the entry captures the
+    // clock state as of this ply — replay scrubbing relies on this to
+    // restore the timer display to its value at each historical move.
+    if (isRealMove) {
+      this.moveHistory.push({
+        san: d.uci,
+        fen: d.fen,
+        whiteClock: this.whiteSecondsLeft,
+        blackClock: this.blackSecondsLeft,
+      });
     }
 
     this.clearSelection();
@@ -492,19 +656,69 @@ export class ChessGameUI {
     title: string; reason: string; icon: string;
     resultKey: "white" | "black" | "draw";
   }): void {
-    if (!this.gameOverOverlayEl) return;
     if (this.gameOverResultEl) this.gameOverResultEl.textContent = args.title;
     if (this.gameOverReasonEl) this.gameOverReasonEl.textContent = args.reason;
     if (this.gameOverIconEl) this.gameOverIconEl.textContent = args.icon;
-    this.gameOverOverlayEl.dataset.result = args.resultKey;
-    this.gameOverOverlayEl.hidden = false;
+    if (this.statusGameOverEl) this.statusGameOverEl.dataset.result = args.resultKey;
+    this._renderStatusPanelLayout();
+    this._updateFullscreenBoardSize();
   }
 
   private _hideGameOverOverlay(): void {
     document.body.classList.remove("game-ended");
-    if (!this.gameOverOverlayEl) return;
-    this.gameOverOverlayEl.hidden = true;
-    delete this.gameOverOverlayEl.dataset.result;
+    if (this.statusGameOverEl) delete this.statusGameOverEl.dataset.result;
+    this._renderStatusPanelLayout();
+    this._updateFullscreenBoardSize();
+  }
+
+  /**
+   * Swaps the status sidebar between its "live game" and "game over"
+   * layouts. Driven by `this.gameOver` + `this.replayMode`:
+   *   - live game: status text + Hint/Undo/Resign
+   *   - game over (not replay): icon + title + reason + Replay/New Game
+   *   - replay: icon + title + reason; action buttons hidden (the
+   *     replay panel below the board has its own controls).
+   *
+   * The swap only fires when `_lastEndData` is populated — otherwise a
+   * locally-detected mate (set by `updateStatus` from the engine's
+   * `gameResult()`) could briefly flip the panel to an empty game-over
+   * view before the `endData` envelope arrives with the actual info.
+   */
+  private _renderStatusPanelLayout(): void {
+    const showGameOver = this.gameOver && this._lastEndData != null;
+    const inReplay = this.replayMode;
+    if (this.statusLiveEl) this.statusLiveEl.hidden = showGameOver;
+    if (this.statusGameOverEl) this.statusGameOverEl.hidden = !showGameOver;
+    if (this.inGameActionsEl) this.inGameActionsEl.hidden = showGameOver;
+    if (this.gameOverActionsEl) {
+      this.gameOverActionsEl.hidden = !showGameOver || inReplay;
+    }
+    this._renderActionButtonStates();
+    this._renderNewGameSectionEnabled();
+  }
+
+  /** Greys out action buttons that can't be invoked in the current
+   *  state. Hint needs an active game where the human is to move;
+   *  Undo needs at least one ply on the history; Resign needs an
+   *  active game. */
+  private _renderActionButtonStates(): void {
+    const live = !this.gameOver && !this.replayMode;
+    const humansTurn = live && this.isHumanToMove() && !this._engineSearching;
+    if (this.hintBtn) {
+      this.hintBtn.disabled = !humansTurn;
+    }
+    if (this.undoBtn) {
+      this.undoBtn.disabled = this.moveHistory.length === 0 || !live;
+    }
+    if (this.resignBtn) {
+      this.resignBtn.disabled = !live;
+    }
+    if (this.gameOverReplayBtn) {
+      // Replay needs at least one ply OR a non-default initial FEN to
+      // scrub through.
+      this.gameOverReplayBtn.disabled = this.moveHistory.length === 0
+        && this.initialFEN === STARTING_FEN;
+    }
   }
 
   // MARK: - localStorage persistence
@@ -627,13 +841,15 @@ export class ChessGameUI {
 
     if (this.gameOver) {
       if (state.endData) {
-        // Replay the original end-of-game banner with full attribution
-        // (winner, reason). Doing it via _applyEndData also re-renders the
-        // sidebar text and re-saves state, so we suppress save by reading
-        // back the same value.
+        // Replay the original end-of-game panel with full attribution
+        // (winner, reason). Doing it via _applyEndData also re-renders
+        // the sidebar text and re-saves state.
         this._applyEndData(state.endData);
+      } else {
+        this._renderStatusPanelLayout();
       }
     } else if (this.isHumanToMove()) {
+      this._renderStatusPanelLayout();
       this.maybeStartClock();
     }
     // If it's the engine's turn on resume, the initial snapshot path
@@ -750,6 +966,7 @@ export class ChessGameUI {
       }
     }
     this.renderCaptures();
+    this._renderLastMoveArrow();
   }
 
   // MARK: - Captured-piece tray
@@ -997,18 +1214,23 @@ export class ChessGameUI {
   }
 
   private _setEngineThinking(thinking: boolean): void {
+    this._engineSearching = thinking;
     document.body.classList.toggle("engine-thinking", thinking);
     if (thinking) {
       this.evalEl.textContent = "Engine is thinking…";
     } else if (this.evalEl.textContent === "Engine is thinking…") {
       this.evalEl.textContent = "";
     }
+    this._renderActionButtonStates();
   }
 
   clearSelection(): void {
     this.selectedSquare = null;
     this.highlightedSquares.clear();
     this.dragFromSquare = null;
+    // Any user interaction that clears the selection also invalidates
+    // a pending hint arrow — the position is about to change.
+    this._clearHintArrow();
   }
 
   async undoUserMove(): Promise<void> {
@@ -1021,41 +1243,102 @@ export class ChessGameUI {
       this.moveHistory.pop();
     }
     this.gameOver = false;
-    this.lastMove = null;
+    this._lastEndData = null;
+
+    // Restore last-move highlighting to whatever the new top-of-history
+    // entry represents (or clear it if we undid back to the start).
+    if (this.moveHistory.length > 0) {
+      const last = this.moveHistory[this.moveHistory.length - 1]!;
+      this.lastMove = this._lastMoveFromEntry(last);
+    } else {
+      this.lastMove = null;
+    }
+
+    // Undo the clocks too. Each MoveHistoryEntry stored the clock
+    // readings as of its move; reverting to the new top of history
+    // means reading its clocks (or falling back to the time control's
+    // initial value if we undid back to the start, or for legacy
+    // history entries that pre-date clock tracking).
+    if (this.timeControl.initialSeconds >= 0) {
+      if (this.moveHistory.length === 0) {
+        this.whiteSecondsLeft = this.timeControl.initialSeconds;
+        this.blackSecondsLeft = this.timeControl.initialSeconds;
+      } else {
+        const last = this.moveHistory[this.moveHistory.length - 1]!;
+        this.whiteSecondsLeft = last.whiteClock ?? this.timeControl.initialSeconds;
+        this.blackSecondsLeft = last.blackClock ?? this.timeControl.initialSeconds;
+      }
+    }
     this.evalEl.textContent = "";
+    this._clearHintArrow();
     this.renderBoard();
+    this.renderClocks();
     this.renderMoves();
     this.updateStatus();
+    this._renderStatusPanelLayout();
     this.maybeStartClock();
     this._saveState();
   }
 
   resign(): void {
     if (this.gameOver) return;
-    this.gameOver = true;
-    this.stopClock();
-    const winner = this.humanColor === "white" ? "Black" : "White";
-    this.statusEl.textContent = `${winner} wins by resignation.`;
-    this._saveState();
+    // Synthesise an endData payload and route through the standard
+    // game-over path so the status panel swaps to its result layout.
+    const winner: SideColor = this.humanColor === "white" ? "black" : "white";
+    this._applyEndData({ status: "resign", winner });
   }
 
   /**
-   * Loads a position from a FEN string and resets the move history,
+   * Loads a position from a FEN string and resets move history,
    * highlights, and game-over flag. Returns `false` if the FEN was
    * rejected by the engine.
+   *
+   * NOTE: bare `engine.loadFEN()` is insufficient here — it only mutates
+   * the engine's board, leaving the protocol's RoundSession pointing at
+   * the old game's state. Subsequent moves go through `socket.send`,
+   * which is gated by the RoundSession's position, so the UI looks
+   * frozen. We re-bootstrap the round via `resumeRound` so the protocol
+   * and engine agree on the new starting position.
    */
   async loadFENAndReset(fen: string): Promise<boolean> {
     if (!this.engine) return false;
     if (this.replayMode) this._exitReplayImmediate();
-    if (!(await this.engine.loadFEN(fen))) return false;
+    this._hideGameOverOverlay();
+
+    this._installSocket();
+    const envelopes = await resumeRound(
+      this.engine,
+      fen,
+      this.humanColor,
+      this.difficulty.depth,
+      this.difficulty.timeMs,
+      this.timeControl.initialSeconds,
+      this.timeControl.incrementSeconds,
+    );
+    if (!envelopes) return false;
+    for (const env of envelopes) {
+      this.socket?._receive(JSON.stringify(env));
+    }
+
     this.initialFEN = fen;
     this.moveHistory = [];
     this.lastMove = null;
     this.gameOver = false;
+    this._lastEndData = null;
+    this.selectedSquare = null;
+    this.highlightedSquares.clear();
+    this.whiteSecondsLeft = this.timeControl.initialSeconds;
+    this.blackSecondsLeft = this.timeControl.initialSeconds;
+    this.stopClock();
+
     this.renderBoard();
+    this.renderClocks();
     this.renderMoves();
     this.updateStatus();
+    this._renderStatusPanelLayout();
+    this._clearHintArrow();
     this._saveState();
+    this.maybeStartClock();
     return true;
   }
 
@@ -1079,20 +1362,17 @@ export class ChessGameUI {
         void this._setReplayPly(parseInt(this.replaySliderEl!.value, 10));
       });
     }
-    this.replayFirstBtn?.addEventListener("click", () => {
-      void this._setReplayPly(0);
-    });
     this.replayPrevBtn?.addEventListener("click", () => {
       void this._setReplayPly(this.replayPly - 1);
     });
     this.replayNextBtn?.addEventListener("click", () => {
       void this._setReplayPly(this.replayPly + 1);
     });
-    this.replayLastBtn?.addEventListener("click", () => {
-      void this._setReplayPly(this.moveHistory.length);
-    });
     this.replayExitBtn?.addEventListener("click", () => {
       void this.exitReplay();
+    });
+    this.replayResumeBtn?.addEventListener("click", () => {
+      void this.resumeFromReplayPly();
     });
 
     // Keyboard shortcuts while in replay mode: ← / → step, Home/End jump.
@@ -1129,13 +1409,17 @@ export class ChessGameUI {
       return;
     }
     this.replayFinalFEN = this.engine.currentFEN;
+    // Snapshot the LIVE clock readings so plain "Exit replay" can put
+    // them back (scrubbing rewrites whiteSecondsLeft / blackSecondsLeft).
+    this.replayLiveWhiteClock = this.whiteSecondsLeft;
+    this.replayLiveBlackClock = this.blackSecondsLeft;
     this.replayMode = true;
     this.replayPly = this.moveHistory.length;  // start at the final position
     document.body.classList.add("replay-mode");
-    // Hide the result banner so the panel has the column to itself.
-    if (this.gameOverOverlayEl && !this.gameOverOverlayEl.hidden) {
-      this.gameOverOverlayEl.hidden = true;
-    }
+    // Game-over indicator stays visible in the status panel — it's
+    // persistent. Action buttons (Replay/New Game) are hidden by the
+    // status-panel layout helper while we're in replay.
+    this._renderStatusPanelLayout();
     if (this.replayPanelEl) this.replayPanelEl.hidden = false;
     if (this.replaySliderEl) {
       this.replaySliderEl.min = "0";
@@ -1143,6 +1427,7 @@ export class ChessGameUI {
       this.replaySliderEl.value = String(this.replayPly);
     }
     this._renderReplayMeta();
+    this._updateFullscreenBoardSize();
     // We're already showing the final position — no engine load needed.
   }
 
@@ -1164,6 +1449,8 @@ export class ChessGameUI {
 
   private async _exitReplayInternal(restoreFinal: boolean): Promise<void> {
     const finalFEN = this.replayFinalFEN;
+    const liveWhite = this.replayLiveWhiteClock;
+    const liveBlack = this.replayLiveBlackClock;
     this.replayMode = false;
     this.replayPly = 0;
     this.replayFinalFEN = null;
@@ -1173,14 +1460,20 @@ export class ChessGameUI {
       // Restore the live position. `loadFEN` is a non-destructive call
       // (no protocol mutation) — perfect for view-restoration.
       await this.engine.loadFEN(finalFEN);
+      // Put the live clock readings back too — `_setReplayPly` rewrote
+      // them while the user was scrubbing.
+      if (liveWhite >= 0) this.whiteSecondsLeft = liveWhite;
+      if (liveBlack >= 0) this.blackSecondsLeft = liveBlack;
     }
     this._clearReplayHighlights();
     this.renderBoard();
+    this.renderClocks();
     this.updateStatus();
-    // Re-show the result banner if the game is still over.
-    if (this.gameOver && this.gameOverOverlayEl && this._lastEndData) {
-      this._applyEndData(this._lastEndData);
-    }
+    this._updateFullscreenBoardSize();
+    // Re-show the game-over action buttons if the game is still over —
+    // _renderStatusPanelLayout() handles that automatically because
+    // replayMode has just been cleared.
+    this._renderStatusPanelLayout();
   }
 
   private async _setReplayPly(ply: number): Promise<void> {
@@ -1208,9 +1501,118 @@ export class ChessGameUI {
     } else {
       this.lastMove = null;
     }
+
+    // Historical clock display. Each MoveHistoryEntry stores the clock
+    // readings AS OF its move; ply 0 (initial position) falls back to
+    // the time control's starting value. Pre-clock-tracking history
+    // entries (no whiteClock field) also fall back to initialSeconds.
+    if (this.timeControl.initialSeconds >= 0) {
+      if (clamped === 0) {
+        this.whiteSecondsLeft = this.timeControl.initialSeconds;
+        this.blackSecondsLeft = this.timeControl.initialSeconds;
+      } else {
+        const entry = this.moveHistory[clamped - 1]!;
+        this.whiteSecondsLeft = entry.whiteClock ?? this.timeControl.initialSeconds;
+        this.blackSecondsLeft = entry.blackClock ?? this.timeControl.initialSeconds;
+      }
+    }
+
     this.renderBoard();
+    this.renderClocks();
     this._renderReplayMeta();
     this.updateStatus();
+  }
+
+  /**
+   * Picks up the game from the currently-scrubbed ply: truncates the
+   * move history, restores the historical clocks, re-bootstraps the
+   * protocol session at this position, and exits replay mode. The
+   * engine plays its move if it's their turn.
+   */
+  async resumeFromReplayPly(): Promise<void> {
+    if (!this.engine || !this.replayMode) return;
+    const ply = this.replayPly;
+    const fen = ply === 0
+      ? this.initialFEN
+      : (this.moveHistory[ply - 1]?.fen ?? this.initialFEN);
+    const newHistory = this.moveHistory.slice(0, ply);
+    const lastEntry = newHistory[newHistory.length - 1];
+    const fallbackClock = this.timeControl.initialSeconds;
+    const whiteClock = lastEntry?.whiteClock ?? fallbackClock;
+    const blackClock = lastEntry?.blackClock ?? fallbackClock;
+
+    // Tear down replay state first so `_applyServerMove` events from the
+    // upcoming bootstrap go through the normal (non-replay) code path.
+    this.replayMode = false;
+    this.replayPly = 0;
+    this.replayFinalFEN = null;
+    this.replayLiveWhiteClock = -1;
+    this.replayLiveBlackClock = -1;
+    document.body.classList.remove("replay-mode");
+    if (this.replayPanelEl) this.replayPanelEl.hidden = true;
+    this._clearReplayHighlights();
+    this._hideGameOverOverlay();
+    this.gameOver = false;
+    this._lastEndData = null;
+
+    // Set history + clock state BEFORE the bootstrap so the boot-snapshot
+    // envelope sees the truncated history; any engine move included in
+    // the boot snapshot will then append to the truncated history rather
+    // than corrupting it.
+    this.moveHistory = newHistory;
+    this.lastMove = ply > 0 ? this._lastMoveFromEntry(newHistory[ply - 1]!) : null;
+    this.selectedSquare = null;
+    this.highlightedSquares.clear();
+    this.stopClock();
+
+    // Re-bootstrap the round at the resumed FEN. We pass the engine's
+    // historical clock as `initialClockSeconds` so the WASM-side
+    // RoundSession starts the engine at that value; the human's clock is
+    // overridden JS-side after the bootstrap completes.
+    const engineColor: SideColor = this.humanColor === "white" ? "black" : "white";
+    const engineClock = engineColor === "white" ? whiteClock : blackClock;
+    this._installSocket();
+    const envelopes = await resumeRound(
+      this.engine,
+      fen,
+      this.humanColor,
+      this.difficulty.depth,
+      this.difficulty.timeMs,
+      // `<0` is the "untimed" sentinel; preserve that.
+      fallbackClock < 0 ? -1 : engineClock,
+      this.timeControl.incrementSeconds,
+    );
+    if (!envelopes) return;
+    for (const env of envelopes) {
+      this.socket?._receive(JSON.stringify(env));
+    }
+
+    // Override the boot snapshot's clock sync with the historical
+    // readings (the bootstrap clamped both sides to engineClock; we want
+    // the user to see exactly the values from the chosen ply).
+    if (fallbackClock >= 0) {
+      this.whiteSecondsLeft = whiteClock;
+      this.blackSecondsLeft = blackClock;
+    }
+
+    this.renderBoard();
+    this.renderClocks();
+    this.renderMoves();
+    this.updateStatus();
+    this._renderStatusPanelLayout();
+    this._clearHintArrow();
+    this._updateFullscreenBoardSize();
+    this._saveState();
+    this.maybeStartClock();
+  }
+
+  private _lastMoveFromEntry(entry: MoveHistoryEntry): LastMove | null {
+    const uci = entry.san;
+    if (uci.length < 4) return null;
+    return {
+      from: parseSquare(uci.slice(0, 2)),
+      to: parseSquare(uci.slice(2, 4)),
+    };
   }
 
   private _renderReplayMeta(): void {
@@ -1225,9 +1627,7 @@ export class ChessGameUI {
         : (this.moveHistory[p - 1]?.san ?? "");
     }
     if (this.replayPrevBtn) this.replayPrevBtn.disabled = p <= 0;
-    if (this.replayFirstBtn) this.replayFirstBtn.disabled = p <= 0;
     if (this.replayNextBtn) this.replayNextBtn.disabled = p >= n;
-    if (this.replayLastBtn) this.replayLastBtn.disabled = p >= n;
     // Re-highlight the move list.
     const items = this.moveListEl.querySelectorAll<HTMLElement>("li");
     items.forEach((li, i) => {
@@ -1267,6 +1667,302 @@ export class ChessGameUI {
       const score = formatScore(searchInfo);
       this.evalEl.textContent =
         `${score}  ·  depth ${searchInfo.depth}, ${searchInfo.nodes} nodes, ${searchInfo.ms} ms`;
+    }
+    this.renderFEN();
+  }
+
+  /**
+   * Updates the FEN display element with the engine's current FEN. Safe
+   * to call when the FEN element isn't wired (the constructor allows it
+   * to be omitted).
+   */
+  renderFEN(): void {
+    if (!this.fenValueEl || !this.engine) return;
+    // Don't trample the user's in-progress edit — they're either about
+    // to paste a new FEN or are mid-edit. The icon button stays in
+    // "load" mode (per `_renderFenButtonMode`) until they click it or
+    // press Escape.
+    if (this.fenDirty) {
+      this._renderFenButtonMode();
+      return;
+    }
+    const fen = this.engine.currentFEN;
+    this.fenValueEl.textContent = fen || "—";
+    this._renderFenButtonMode();
+  }
+
+  private _isFenFieldDirty(): boolean {
+    if (!this.fenValueEl || !this.engine) return false;
+    const text = (this.fenValueEl.textContent ?? "").trim();
+    return text.length > 0 && text !== this.engine.currentFEN;
+  }
+
+  /**
+   * Toggles the icon button between "copy" mode (default) and "load"
+   * mode (when the user has typed a new FEN). The CSS class controls
+   * which inline SVG icon is visible.
+   */
+  private _renderFenButtonMode(): void {
+    if (!this.copyFENBtn) return;
+    const isLoad = this.fenDirty
+      && (this.fenValueEl?.textContent ?? "").trim().length > 0;
+    this.copyFENBtn.classList.toggle("load-mode", isLoad);
+    if (isLoad) {
+      this.copyFENBtn.title = "Load this FEN";
+      this.copyFENBtn.setAttribute("aria-label", "Load the FEN you typed");
+    } else {
+      this.copyFENBtn.title = "Copy FEN";
+      this.copyFENBtn.setAttribute("aria-label", "Copy FEN to clipboard");
+    }
+  }
+
+  // MARK: - Hint
+  //
+  // The Hint button asks the engine for its current best move and draws
+  // an arrow over the board from origin to destination. The arrow is
+  // rendered into an absolutely-positioned `<svg>` overlay whose
+  // `viewBox` matches the 8×8 grid of the board, so we can express
+  // coordinates in "files / ranks" units.
+
+  /**
+   * Asks the engine for the best move at the current position and
+   * draws an arrow on the board. Disables the Hint button while the
+   * search is in flight and re-enables on completion.
+   */
+  async showHint(): Promise<void> {
+    if (!this.engine) return;
+    if (this.replayMode || this.gameOver) return;
+    if (!this.isHumanToMove()) return;  // engine's turn, no point hinting
+    if (this.hintBtn) this.hintBtn.disabled = true;
+    this._setEngineThinking(true);
+    try {
+      const uci = await this.engine.bestMove();
+      this._renderHintArrow(uci);
+    } catch (err) {
+      console.warn("hint failed:", err);
+    } finally {
+      this._setEngineThinking(false);
+      if (this.hintBtn) this.hintBtn.disabled = false;
+    }
+  }
+
+  private _renderHintArrow(uci: string | null): void {
+    if (!this.hintOverlayEl || !this.hintArrowEl) return;
+    if (!uci || uci.length < 4) {
+      this.hintOverlayEl.style.display = "none";
+      return;
+    }
+    const fromFile = uci.charCodeAt(0) - 97;
+    const fromRank = uci.charCodeAt(1) - 49;
+    const toFile = uci.charCodeAt(2) - 97;
+    const toRank = uci.charCodeAt(3) - 49;
+    const whitePerspective = this._scaffoldOrientation !== "black";
+    const center = (file: number, rank: number): { x: number; y: number } => ({
+      x: (whitePerspective ? file : 7 - file) + 0.5,
+      y: (whitePerspective ? 7 - rank : rank) + 0.5,
+    });
+    const from = center(fromFile, fromRank);
+    const to = center(toFile, toRank);
+
+    // Shorten the line slightly so the arrowhead sits comfortably
+    // inside the destination square instead of past the next gridline.
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy);
+    const trim = 0.25;
+    const scale = len > trim ? (len - trim) / len : 0;
+    const endX = from.x + dx * scale;
+    const endY = from.y + dy * scale;
+
+    this.hintArrowEl.setAttribute("x1", String(from.x));
+    this.hintArrowEl.setAttribute("y1", String(from.y));
+    this.hintArrowEl.setAttribute("x2", String(endX));
+    this.hintArrowEl.setAttribute("y2", String(endY));
+    this.hintOverlayEl.style.display = "";
+  }
+
+  private _clearHintArrow(): void {
+    if (this.hintOverlayEl) this.hintOverlayEl.style.display = "none";
+  }
+
+  /**
+   * Renders (or clears) the last-move arrow over the board. Called any
+   * time `lastMove` changes or the toggle flips. The arrow is drawn as
+   * a SINGLE filled polygon (one continuous fill region) so that the
+   * stem and arrowhead don't overlap when the fill is translucent —
+   * the previous line + marker-end approach produced an obvious darker
+   * patch at their meeting point at the colour's low opacity.
+   *
+   * The arrow:
+   *  - paints BENEATH the pieces (z-index in CSS) so the piece silhouette
+   *    stays fully visible;
+   *  - is colored to match the side that just moved (light cream for
+   *    white pieces, soft black for black pieces) at low opacity;
+   *  - is trimmed at both ends so the head tip lands at the edge of
+   *    the piece on the destination square rather than overlapping it.
+   */
+  private _renderLastMoveArrow(): void {
+    if (!this.lastMoveOverlayEl || !this.lastMoveArrowEl) return;
+    if (!this.lastMoveArrowEnabled || !this.lastMove || !this.engine) {
+      this.lastMoveOverlayEl.style.display = "none";
+      return;
+    }
+    const fromFile = this.lastMove.from & 7;
+    const fromRank = this.lastMove.from >> 3;
+    const toFile = this.lastMove.to & 7;
+    const toRank = this.lastMove.to >> 3;
+    const whitePerspective = this._scaffoldOrientation !== "black";
+    const center = (file: number, rank: number): { x: number; y: number } => ({
+      x: (whitePerspective ? file : 7 - file) + 0.5,
+      y: (whitePerspective ? 7 - rank : rank) + 0.5,
+    });
+    const from = center(fromFile, fromRank);
+    const to = center(toFile, toRank);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) {
+      this.lastMoveOverlayEl.style.display = "none";
+      return;
+    }
+
+    // Asymmetric trim: small bite out of the start (the from-square is
+    // empty post-move) and a bigger bite at the end so the head tip
+    // lands at the edge of the destination piece.
+    const TRIM_START = 0.18;
+    const TRIM_END = 0.5;
+    let startFrac = 0;
+    let endFrac = 1;
+    if (len > TRIM_START + TRIM_END) {
+      startFrac = TRIM_START / len;
+      endFrac = 1 - (TRIM_END / len);
+    } else {
+      // Very short moves: clip to a tiny middle segment rather than
+      // vanishing entirely.
+      startFrac = 0.3;
+      endFrac = 0.7;
+    }
+    const startX = from.x + dx * startFrac;
+    const startY = from.y + dy * startFrac;
+    const tipX = from.x + dx * endFrac;
+    const tipY = from.y + dy * endFrac;
+
+    // Unit vector along the arrow + its perpendicular.
+    const ax = tipX - startX;
+    const ay = tipY - startY;
+    const alen = Math.hypot(ax, ay);
+    if (alen === 0) {
+      this.lastMoveOverlayEl.style.display = "none";
+      return;
+    }
+    const ux = ax / alen;
+    const uy = ay / alen;
+    const px = -uy;
+    const py = ux;
+
+    // Arrow geometry, all in SVG viewBox units (1 = one square).
+    const STEM_W = 0.16;
+    const HEAD_W = 0.42;
+    // Clamp head length so the head doesn't eat the whole arrow on
+    // short knight-style moves.
+    const HEAD_LEN = Math.min(0.28, alen * 0.6);
+
+    // Head base — where the stem meets the head.
+    const baseX = tipX - ux * HEAD_LEN;
+    const baseY = tipY - uy * HEAD_LEN;
+
+    // Seven-vertex polygon (counter-clockwise around the arrow):
+    //   p1 (stem-start +)   p2 (head-base +)   p3 (wing +)
+    //                                                       p4 (tip)
+    //   p7 (stem-start -)   p6 (head-base -)   p5 (wing -)
+    const fmt = (x: number, y: number): string =>
+      `${x.toFixed(3)},${y.toFixed(3)}`;
+    const p1 = fmt(startX + px * STEM_W / 2, startY + py * STEM_W / 2);
+    const p2 = fmt(baseX  + px * STEM_W / 2, baseY  + py * STEM_W / 2);
+    const p3 = fmt(baseX  + px * HEAD_W / 2, baseY  + py * HEAD_W / 2);
+    const p4 = fmt(tipX, tipY);
+    const p5 = fmt(baseX  - px * HEAD_W / 2, baseY  - py * HEAD_W / 2);
+    const p6 = fmt(baseX  - px * STEM_W / 2, baseY  - py * STEM_W / 2);
+    const p7 = fmt(startX - px * STEM_W / 2, startY - py * STEM_W / 2);
+    const d = `M${p1} L${p2} L${p3} L${p4} L${p5} L${p6} L${p7} Z`;
+    this.lastMoveArrowEl.setAttribute("d", d);
+
+    // Color to match the piece that just landed on `to`.
+    const movedPiece = this.engine.pieceAt(this.lastMove.to);
+    const isWhitePiece = movedPiece >= 1 && movedPiece <= 6;
+    this.lastMoveOverlayEl.style.color = isWhitePiece
+      ? "rgba(248, 245, 235, 0.65)"   // soft cream — matches the white piece fill
+      : "rgba(30, 25, 18, 0.6)";       // soft black — matches the black piece fill
+    this.lastMoveOverlayEl.style.display = "";
+  }
+
+  /** Greys out the New Game form controls while a game is in progress.
+   *  Re-enables them once the game ends (any cause) or the page is in
+   *  its pre-game initial state. */
+  private _renderNewGameSectionEnabled(): void {
+    // "In a game" means: a round has been bootstrapped (engine + socket
+    // are both ready) and the result hasn't landed yet.
+    const inProgress = this.engine != null
+      && this.socket != null
+      && !this.gameOver;
+    const lock = inProgress && !this.replayMode;
+    const controls: Array<HTMLSelectElement | HTMLButtonElement | null> = [
+      this.colorSelect, this.difficultySelect, this.timeSelect,
+      this.startGameBtn,
+    ];
+    for (const el of controls) {
+      if (el) el.disabled = lock;
+    }
+  }
+
+  /**
+   * Click handler for the FEN icon button. Branches on the button's
+   * current mode:
+   *   - dirty (load mode): apply the typed/pasted FEN to the engine.
+   *   - clean (copy mode): write the current FEN to the clipboard.
+   */
+  private async _copyOrLoadFEN(): Promise<void> {
+    if (!this.engine) return;
+    const text = (this.fenValueEl?.textContent ?? "").trim();
+
+    // Load mode: user has edited the field.
+    if (this.fenDirty && text.length > 0) {
+      const ok = await this.loadFENAndReset(text);
+      if (!ok) {
+        window.alert("That FEN was rejected by the parser.");
+        return;
+      }
+      // Clear dirty AFTER the load completes (loadFENAndReset itself
+      // triggers renderFEN, but it short-circuits while fenDirty is
+      // still true). Then re-render to sync the field text with the
+      // engine's just-applied FEN and toggle the button back to copy.
+      this.fenDirty = false;
+      this.renderFEN();
+      return;
+    }
+
+    // Copy mode: clipboard the engine's current FEN.
+    const fen = this.engine.currentFEN;
+    if (!fen) return;
+    try {
+      await navigator.clipboard.writeText(fen);
+    } catch {
+      // Older browsers / non-secure contexts fall back to a textarea
+      // + execCommand. The selection is what most users will paste.
+      const ta = document.createElement("textarea");
+      ta.value = fen;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* nothing else to try */ }
+      document.body.removeChild(ta);
+    }
+    if (this.copyFENBtn) {
+      this.copyFENBtn.classList.add("copied");
+      window.setTimeout(() => {
+        this.copyFENBtn?.classList.remove("copied");
+      }, 1200);
     }
   }
 
@@ -1318,12 +2014,11 @@ export class ChessGameUI {
     }
     this.renderClocks();
     if (this.whiteSecondsLeft <= 0 || this.blackSecondsLeft <= 0) {
-      const loser = this.whiteSecondsLeft <= 0 ? "White" : "Black";
-      const winner = this.whiteSecondsLeft <= 0 ? "Black" : "White";
-      this.statusEl.textContent = `${loser} flagged. ${winner} wins on time.`;
-      this.gameOver = true;
-      this.stopClock();
-      this._saveState();
+      // Route the flagged result through the standard game-over path so
+      // the status panel swaps to its result layout. Winner is whoever
+      // still has time on their clock.
+      const winner: SideColor = this.whiteSecondsLeft <= 0 ? "black" : "white";
+      this._applyEndData({ status: "outoftime", winner });
     }
   }
 
@@ -1337,6 +2032,52 @@ export class ChessGameUI {
     // Used by the fullscreen mode to hide non-applicable clocks entirely.
     this.whiteClockEl.classList.toggle("untimed", whiteUntimed);
     this.blackClockEl.classList.toggle("untimed", blackUntimed);
+    // Hiding an untimed clock can change the column's reserved height.
+    this._updateFullscreenBoardSize();
+  }
+
+  /**
+   * Recomputes `--fullscreen-board-size` so the square board fits in
+   * the viewport alongside whatever non-board children are currently
+   * visible (banner, replay panel, captures rows). Called whenever any
+   * of those toggle visibility, plus on window resize. A no-op when
+   * we're not in fullscreen.
+   */
+  _updateFullscreenBoardSize(): void {
+    const root = document.documentElement;
+    if (!document.body.classList.contains("fullscreen")) {
+      root.style.removeProperty("--fullscreen-board-size");
+      return;
+    }
+    const column = this.boardEl.closest(".board-column") as HTMLElement | null;
+    if (!column) return;
+
+    const style = getComputedStyle(column);
+    const gap = parseFloat(style.gap || "0");
+    const padTop = parseFloat(style.paddingTop || "0");
+    const padBottom = parseFloat(style.paddingBottom || "0");
+    const padLeft = parseFloat(style.paddingLeft || "0");
+    const padRight = parseFloat(style.paddingRight || "0");
+
+    let reserved = padTop + padBottom;
+    let visibleNonBoard = 0;
+    for (const node of Array.from(column.children) as HTMLElement[]) {
+      if (node.classList.contains("board-area")) continue;
+      // Element is rendered if not hidden AND has measurable height.
+      if (node.hidden) continue;
+      const cs = getComputedStyle(node);
+      if (cs.display === "none") continue;
+      // offsetHeight includes the element's border/padding but excludes
+      // collapsed margins, which is what we want for flex children.
+      reserved += node.offsetHeight;
+      visibleNonBoard++;
+    }
+    if (visibleNonBoard > 0) reserved += gap * visibleNonBoard;
+
+    const availableHeight = Math.max(0, window.innerHeight - reserved);
+    const availableWidth = Math.max(0, window.innerWidth - padLeft - padRight);
+    const size = Math.max(0, Math.min(availableHeight, availableWidth));
+    root.style.setProperty("--fullscreen-board-size", `${size}px`);
   }
 }
 

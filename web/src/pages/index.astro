@@ -8,50 +8,11 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
-    <title>SkipChess — WebAssembly Chess</title>
+    <title>Skip Chess — WebAssembly Chess</title>
   </head>
   <body>
     <div class="app-shell">
-      <!-- Left column: game setup menu -->
-      <div>
-        <h1>SkipChess</h1>
-        <p class="subtitle">
-          A WebAssembly chess engine built with Swift. Pick your settings
-          and play against the bundled alpha-beta engine.
-        </p>
-        <div class="menu-card">
-          <h2 style="margin:0 0 0.5rem 0; font-size:1rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--color-text-muted);">
-            New Game
-          </h2>
-
-          <label for="opt-color">You play as</label>
-          <select id="opt-color">
-            <option value="white" selected>White</option>
-            <option value="black">Black</option>
-            <option value="random">Random</option>
-          </select>
-
-          <label for="opt-difficulty">Difficulty</label>
-          <select id="opt-difficulty">
-            {DIFFICULTIES.map((d) => (
-              <option value={d.id} selected={d.id === "hard"}>{d.label} (≈ {d.elo} ELO)</option>
-            ))}
-          </select>
-          <div id="difficulty-detail" class="difficulty-elo"></div>
-
-          <label for="opt-time">Time control</label>
-          <select id="opt-time">
-            {TIME_CONTROLS.map((t) => (
-              <option value={t.id}>{t.label}</option>
-            ))}
-          </select>
-
-          <button id="btn-start-game">Start game</button>
-          <button id="btn-load-fen" class="secondary" type="button">Load FEN…</button>
-        </div>
-      </div>
-
-      <!-- Center column: board + captures + clocks -->
+      <!-- Left column: board + captures + clocks -->
       <div class="board-column">
         <!-- Top: opponent (black-by-default) captures + clock -->
         <div class="board-side board-side-top">
@@ -60,105 +21,276 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
         </div>
         <div class="board-area">
           <div id="board" class="board"></div>
+          <!-- Last-move arrow overlay. Drawn as a SINGLE filled polygon
+               so the stem and arrowhead share one continuous fill —
+               eliminates the darker patch where a stroked line would
+               otherwise overlap a marker-end at translucent opacities. -->
+          <svg id="last-move-overlay" class="last-move-overlay" viewBox="0 0 8 8"
+               preserveAspectRatio="none" aria-hidden="true"
+               style="display:none;">
+            <path id="last-move-arrow" d="" fill="currentColor" />
+          </svg>
+          <!-- SVG overlay used by the Hint button to draw a from→to
+               arrow over the board. Hidden until a hint is requested. -->
+          <svg id="hint-overlay" class="hint-overlay" viewBox="0 0 8 8"
+               preserveAspectRatio="none" aria-hidden="true"
+               style="display:none;">
+            <defs>
+              <marker id="hint-arrow-head" viewBox="0 0 10 10"
+                      refX="6" refY="5" markerWidth="3.6" markerHeight="3.6"
+                      orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+              </marker>
+            </defs>
+            <line id="hint-arrow" x1="0" y1="0" x2="0" y2="0"
+                  stroke="currentColor" stroke-width="0.18"
+                  stroke-linecap="round"
+                  marker-end="url(#hint-arrow-head)" />
+          </svg>
         </div>
-        <!-- Bottom: player (white-by-default) captures + clock -->
+        <!-- Bottom: player (white-by-default) captures + clock. The
+             board column has NOTHING below this — loading messages and
+             the replay panel live in their respective sidebars. -->
         <div class="board-side board-side-bottom">
           <div id="captures-white" class="captures captures-by-white"></div>
           <div id="white-clock" class="clock">—</div>
         </div>
-
-        <!-- Game-result banner. Sits BELOW the board so the final
-             position remains fully visible for analysis. Hidden until a
-             result lands. -->
-        <div id="game-over-banner" class="game-result-banner" role="status"
-             aria-live="polite" hidden>
-          <div id="game-over-icon" class="game-result-icon" aria-hidden="true"></div>
-          <div class="game-result-text">
-            <h2 id="game-over-result" class="game-result-title">Checkmate</h2>
-            <p id="game-over-reason" class="game-result-reason"></p>
-          </div>
-          <div class="game-result-actions">
-            <button id="btn-game-over-replay" class="secondary" type="button">
-              Replay
-            </button>
-            <button id="btn-game-over-new" class="primary" type="button">
-              New Game
-            </button>
-          </div>
-        </div>
-
-        <!-- Replay scrubber. Shown when the user enters replay mode (from
-             the result banner or via Replay during a finished game). -->
-        <div id="replay-panel" class="replay-panel" hidden>
-          <div class="replay-row">
-            <button id="btn-replay-first" class="replay-step" type="button"
-                    aria-label="Jump to start" title="Jump to start">⏮</button>
-            <button id="btn-replay-prev" class="replay-step" type="button"
-                    aria-label="Previous move" title="Previous move">◀</button>
-            <input id="replay-slider" class="replay-slider" type="range"
-                   min="0" max="0" step="1" value="0"
-                   aria-label="Move slider" />
-            <button id="btn-replay-next" class="replay-step" type="button"
-                    aria-label="Next move" title="Next move">▶</button>
-            <button id="btn-replay-last" class="replay-step" type="button"
-                    aria-label="Jump to end" title="Jump to end">⏭</button>
-          </div>
-          <div class="replay-row replay-row-bottom">
-            <span id="replay-counter" class="replay-counter">— / —</span>
-            <span id="replay-move-label" class="replay-move-label"></span>
-            <button id="btn-replay-exit" class="secondary" type="button">
-              Exit replay
-            </button>
-          </div>
-        </div>
-
-        <div class="loading-row">
-          <span id="loading-indicator">Loading WebAssembly engine…</span>
-        </div>
       </div>
 
-      <!-- Right column: status, moves, eval -->
+      <!-- Right column: single combined sidebar. New Game + Status are
+           merged into one card with each sub-section delimited by an
+           uppercase mini-heading. Replay panel sits at the top when
+           active. Store badges + Engine footer live at the bottom. -->
       <div>
         <div class="sidebar-card">
-          <h2>Status</h2>
-          <p id="status" class="status">—</p>
-          <p id="eval" class="eval"></p>
-          <h2 style="margin-top:1rem;">Moves</h2>
-          <ol id="move-list" class="move-list"></ol>
-          <div class="toolbar">
-            <button id="btn-undo">Undo</button>
-            <button id="btn-resign">Resign</button>
+          <!-- Replay scrubber. Shown only during replay mode. -->
+          <div id="replay-panel" class="replay-panel" hidden>
+            <div class="replay-row">
+              <button id="btn-replay-prev" class="replay-step" type="button"
+                      aria-label="Previous move" title="Previous move">◀</button>
+              <input id="replay-slider" class="replay-slider" type="range"
+                     min="0" max="0" step="1" value="0"
+                     aria-label="Move slider" />
+              <button id="btn-replay-next" class="replay-step" type="button"
+                      aria-label="Next move" title="Next move">▶</button>
+            </div>
+            <div class="replay-row replay-row-bottom">
+              <span id="replay-counter" class="replay-counter">— / —</span>
+              <span id="replay-move-label" class="replay-move-label"></span>
+            </div>
+            <div class="replay-row">
+              <button id="btn-replay-resume" class="action-btn primary" type="button">
+                Resume
+              </button>
+              <button id="btn-replay-exit" class="action-btn secondary" type="button">
+                Exit replay
+              </button>
+            </div>
+          </div>
+
+          <!-- ──────────────── Status section (FIRST, at top) -->
+          <div class="card-section">
+            <h2>Status</h2>
+
+            <div id="status-live" class="status-live">
+              <p id="status" class="status">—</p>
+              <p id="eval" class="eval"></p>
+            </div>
+
+            <div id="status-game-over" class="status-game-over" hidden>
+              <div id="game-over-icon" class="status-game-over-icon" aria-hidden="true"></div>
+              <h3 id="game-over-result" class="status-game-over-title">Checkmate</h3>
+              <p id="game-over-reason" class="status-game-over-reason"></p>
+            </div>
+
+            <label class="status-toggle">
+              <input id="opt-last-move-arrow" type="checkbox" />
+              <span>Last Move Arrow</span>
+            </label>
+
+            <div id="actions-in-game" class="status-actions">
+              <button id="btn-hint" class="action-btn" type="button">Hint</button>
+              <button id="btn-undo" class="action-btn" type="button">Undo</button>
+              <button id="btn-resign" class="action-btn" type="button">Resign</button>
+            </div>
+            <!-- Game-over: only Replay here. The "New game" trigger lives
+                 in the New Game section below — having two would be
+                 redundant. -->
+            <div id="actions-game-over" class="status-actions" hidden>
+              <button id="btn-game-over-replay" class="action-btn secondary" type="button">
+                Replay
+              </button>
+            </div>
+          </div>
+
+          <!-- ──────────────── New Game section (below Status) -->
+          <div id="new-game-section" class="card-section">
+            <h2>New Game</h2>
+            <div class="form-row">
+              <label for="opt-color">You play as</label>
+              <select id="opt-color">
+                <option value="white" selected>White</option>
+                <option value="black">Black</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="opt-difficulty">Difficulty</label>
+              <select id="opt-difficulty">
+                {DIFFICULTIES.map((d) => (
+                  <option value={d.id} selected={d.id === "hard"}>{d.label} (≈ {d.elo} ELO)</option>
+                ))}
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="opt-time">Time control</label>
+              <select id="opt-time">
+                {TIME_CONTROLS.map((t) => (
+                  <option value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            <div class="new-game-actions">
+              <button id="btn-start-game" class="primary-btn" type="button">Start game</button>
+            </div>
+            <p id="loading-indicator" class="loading-indicator">Loading WebAssembly engine…</p>
+          </div>
+
+          <!-- ──────────────── Moves section (flex-grows to fill) -->
+          <div class="card-section moves-section">
+            <h2>Moves</h2>
+            <ol id="move-list" class="move-list"></ol>
+          </div>
+
+          <!-- ──────────────── FEN section -->
+          <!-- The FEN field is editable: paste or type a position into it
+               and the icon button to the right morphs from "copy" to
+               "load" so a click applies the new position. -->
+          <div class="card-section">
+            <h2>FEN</h2>
+            <div class="fen-row">
+              <code id="fen-value" class="fen-value"
+                    contenteditable="plaintext-only"
+                    spellcheck="false">—</code>
+              <button id="btn-copy-fen" class="icon-btn" type="button"
+                      aria-label="Copy FEN to clipboard" title="Copy FEN">
+                <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16"
+                     fill="none" stroke="currentColor" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                  <polyline points="5 12 10 17 19 7"></polyline>
+                </svg>
+                <svg class="icon-load" viewBox="0 0 24 24" width="14" height="14"
+                     fill="currentColor"
+                     aria-hidden="true">
+                  <path d="M7 5l12 7-12 7z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- ──────────────── Badges, horizontal row at the bottom -->
+          <div class="store-badges">
+            <a class="store-badge"
+               href="https://apps.apple.com/app/id6761661340"
+               target="_blank" rel="noopener noreferrer"
+               aria-label="Download Skip Chess on the App Store">
+              <img src="/badges/apple-app-store.svg"
+                   alt="Download on the App Store" />
+            </a>
+            <a class="store-badge"
+               href="https://play.google.com/store/apps/details?id=org.appfair.app.Faire_Games"
+               target="_blank" rel="noopener noreferrer"
+               aria-label="Get Skip Chess on Google Play">
+              <img src="/badges/google-play-store.svg"
+                   alt="Get it on Google Play" />
+            </a>
+            <a class="store-badge github-badge"
+               href="https://github.com/Faire-Games/skip-chess/"
+               target="_blank" rel="noopener noreferrer"
+               aria-label="View source on GitHub">
+              <svg viewBox="0 0 24 24" width="16" height="16"
+                   fill="currentColor" aria-hidden="true">
+                <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1.18-.02-2.14-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.9-.39.99 0 1.98.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.12 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .31.21.68.8.56C20.21 21.38 23.5 17.07 23.5 12 23.5 5.65 18.35.5 12 .5z"/>
+              </svg>
+              <span>Source</span>
+            </a>
           </div>
         </div>
+
         <p class="footer">
-          Pieces by <a href="https://github.com/lichess-org/lila/tree/master/public/piece">lichess.org</a>.<br />
-          Engine: SkipChess (alpha-beta + PeSTO) compiled to WebAssembly.
+          Engine: <a href="https://github.com/Faire-Games/skip-chess/"
+                     target="_blank" rel="noopener noreferrer">Skip Chess</a>
+          (alpha-beta + PeSTO) compiled to WebAssembly.
         </p>
       </div>
     </div>
 
-    <!-- Floating fullscreen toggle — visible both in regular and fullscreen
-         mode so the user always has a way back out. -->
-    <button id="btn-fullscreen" class="fullscreen-toggle" type="button"
-            title="Toggle fullscreen" aria-label="Toggle fullscreen">
-      <svg id="icon-fullscreen-enter" width="20" height="20" viewBox="0 0 24 24"
-           fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 9V4h5"></path>
-        <path d="M20 9V4h-5"></path>
-        <path d="M4 15v5h5"></path>
-        <path d="M20 15v5h-5"></path>
-      </svg>
-      <svg id="icon-fullscreen-exit" width="20" height="20" viewBox="0 0 24 24"
-           fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round"
-           style="display:none">
-        <path d="M9 4v5H4"></path>
-        <path d="M15 4v5h5"></path>
-        <path d="M9 20v-5H4"></path>
-        <path d="M15 20v-5h5"></path>
-      </svg>
-    </button>
+    <!-- Top-right floating toolbar: theme picker + fullscreen button.
+         Fixed-positioned so it sits above the Status section in the
+         upper-right corner and remains reachable in fullscreen mode
+         (its host node is outside `.app-shell`, which fullscreen mode
+         hides via `display:none`). -->
+    <div class="top-right-controls">
+      <div class="theme-picker" role="radiogroup" aria-label="Color theme">
+        <button id="btn-theme-light" class="theme-segment" type="button"
+                role="radio" data-theme="light" aria-checked="false"
+                aria-label="Light theme" title="Light theme">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+          </svg>
+        </button>
+        <button id="btn-theme-system" class="theme-segment" type="button"
+                role="radio" data-theme="system" aria-checked="true"
+                aria-label="System theme" title="System theme">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M8 22h8M12 18v4"></path>
+          </svg>
+        </button>
+        <button id="btn-theme-dark" class="theme-segment" type="button"
+                role="radio" data-theme="dark" aria-checked="false"
+                aria-label="Dark theme" title="Dark theme">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+          </svg>
+        </button>
+      </div>
+      <button id="btn-fullscreen" class="fullscreen-toggle" type="button"
+              title="Toggle fullscreen" aria-label="Toggle fullscreen">
+        <svg id="icon-fullscreen-enter" width="18" height="18" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9V4h5"></path>
+          <path d="M20 9V4h-5"></path>
+          <path d="M4 15v5h5"></path>
+          <path d="M20 15v5h-5"></path>
+        </svg>
+        <svg id="icon-fullscreen-exit" width="18" height="18" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none">
+          <path d="M9 4v5H4"></path>
+          <path d="M15 4v5h5"></path>
+          <path d="M9 20v-5H4"></path>
+          <path d="M15 20v-5h5"></path>
+        </svg>
+      </button>
+    </div>
 
     <script>
       // Imports inside a hoisted Astro <script> tag are resolved by Vite,

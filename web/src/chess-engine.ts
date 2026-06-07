@@ -198,6 +198,16 @@ export class ChessEngine {
     return replies;
   }
 
+  /**
+   * Asks the engine for the best move at the current position WITHOUT
+   * mutating any state. The search uses the engine's configured depth /
+   * time budget (set via `chess_configure_engine`, ultimately `protocolInit`).
+   * Returns the empty string when there is no legal move (game over).
+   */
+  async bestMove(): Promise<string> {
+    return this._call<string>("bestMove");
+  }
+
   // MARK: - Synchronous board queries (read from cache)
 
   get currentFEN(): string {

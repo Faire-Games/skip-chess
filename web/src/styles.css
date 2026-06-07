@@ -14,6 +14,8 @@
   --color-last-from: rgba(255, 255, 0, 0.30);
   --color-last-to: rgba(255, 255, 0, 0.55);
   --color-in-check: rgba(255, 60, 60, 0.55);
+
+  /* Light-theme tokens. Dark-theme overrides below. */
   --color-text: #1c1a17;
   --color-text-muted: #6b5e51;
   --color-card-bg: #fbf7f0;
@@ -21,6 +23,47 @@
   --color-page-bg: #ece2cc;
   --color-accent: #4f6e44;
   --color-accent-hover: #3d5635;
+  /* Surface-on-card tints used by inputs / subtle row backgrounds. */
+  --color-surface-soft: rgba(0, 0, 0, 0.04);
+
+  /* Reserved vertical space above the board for the captures+clock
+   * row. The sidebar uses this to align its top with the top of the
+   * board (and combined with `height: var(--board-size)`, its bottom
+   * with the bottom of the board). Tuned to match the rendered height
+   * of the .board-side row (≈ clock height + small margins). */
+  --captures-row-h: 3.15rem;
+}
+
+/* Dark-theme tokens, applied either by an explicit user choice
+ * (`body.theme-dark`) or by the system preference when the user has
+ * picked "system" (`body.theme-system` + matching media query). The
+ * picker JS toggles the body classes; we keep them as two distinct
+ * selectors so each can be tested independently. */
+body.theme-dark,
+body.theme-system {
+  /* default to light when system mode doesn't apply — see media query */
+}
+body.theme-dark {
+  --color-text: #ebe7e0;
+  --color-text-muted: #968a7c;
+  --color-card-bg: #2a2218;
+  --color-card-border: #4a3f33;
+  --color-page-bg: #181410;
+  --color-accent: #7ba56b;
+  --color-accent-hover: #95c485;
+  --color-surface-soft: rgba(255, 255, 255, 0.05);
+}
+@media (prefers-color-scheme: dark) {
+  body.theme-system {
+    --color-text: #ebe7e0;
+    --color-text-muted: #968a7c;
+    --color-card-bg: #2a2218;
+    --color-card-border: #4a3f33;
+    --color-page-bg: #181410;
+    --color-accent: #7ba56b;
+    --color-accent-hover: #95c485;
+    --color-surface-soft: rgba(255, 255, 255, 0.05);
+  }
 }
 
 * {
@@ -34,21 +77,30 @@ html, body {
     "Helvetica Neue", Arial, sans-serif;
   color: var(--color-text);
   background: var(--color-page-bg);
+  /* The page should NEVER scroll horizontally. This is a safety net so
+   * any future layout mistake can't leak horizontal scroll. */
+  overflow-x: hidden;
 }
 
+/* 2-column layout: board on the left, combined sidebar (New Game +
+ * Status + Moves + FEN + badges + footer) on the right. The grid is
+ * centered horizontally so wide viewports don't waste space; the
+ * sidebar is capped so it stays a sensible width. */
 .app-shell {
   display: grid;
-  grid-template-columns: 1fr min-content 1fr;
+  grid-template-columns: min-content minmax(280px, 380px);
   gap: 2rem;
   padding: 2rem clamp(1rem, 4vw, 4rem);
   min-height: 100vh;
   align-items: start;
+  justify-content: center;
 }
 
 @media (max-width: 1000px) {
   .app-shell {
     grid-template-columns: 1fr;
     padding: 1rem;
+    justify-content: stretch;
   }
 }
 
@@ -59,75 +111,319 @@ html, body {
   letter-spacing: 0.02em;
 }
 
-.app-shell .subtitle {
-  margin: 0 0 1rem 0;
-  color: var(--color-text-muted);
-  font-size: 0.95rem;
-}
-
-.menu-card,
 .sidebar-card {
   background: var(--color-card-bg);
   border: 1px solid var(--color-card-border);
   border-radius: 0.75rem;
-  padding: 1.25rem;
+  padding: 1rem 1.1rem;
   box-shadow: 0 6px 16px rgba(60, 40, 20, 0.06);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.menu-card label {
-  display: block;
-  margin: 0.75rem 0 0.25rem;
-  font-size: 0.85rem;
+/* In 2-column wide mode, the sidebar tops align with the top of the
+ * board AND the sidebar's height matches the board exactly — Moves
+ * inside it scrolls if necessary to keep everything else visible. */
+@media (min-width: 1001px) {
+  .sidebar-card {
+    margin-top: var(--captures-row-h);
+    height: var(--board-size);
+    /* Leave room for the bottom captures+clock row of the board so
+     * the sidebar bottom lines up with the bottom of the BOARD (not
+     * with the bottom captures row). */
+  }
+}
+
+/* Subsections of the merged sidebar — Status / New Game / Moves / FEN
+ * / Badges. Each gets a faint top divider so the visual hierarchy
+ * reads clearly without nesting yet another card. */
+.card-section + .card-section,
+.card-section + .store-badges {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-card-border);
+}
+
+.card-section { flex: 0 0 auto; }
+/* Moves takes the remaining vertical space and scrolls internally. */
+.card-section.moves-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.card-section.moves-section .move-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+
+/* New Game form rows — label + select inline so each option takes a
+ * single row, saving vertical space inside the fixed-height sidebar. */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.35rem 0;
+}
+.form-row label {
+  flex: 0 0 5.2rem;
+  margin: 0;
+  font-size: 0.78rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
-
-.menu-card select,
-.menu-card input[type=text] {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
+.form-row select,
+.form-row input[type=text] {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
   border: 1px solid var(--color-card-border);
-  border-radius: 0.4rem;
-  font-size: 0.95rem;
+  border-radius: 0.35rem;
+  font-size: 0.9rem;
   font-family: inherit;
-  background: white;
+  background: var(--color-card-bg);
   color: var(--color-text);
 }
-
-.menu-card .difficulty-elo {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  margin-top: 0.25rem;
+.form-row select:disabled,
+.form-row input[type=text]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.menu-card button {
+/* New Game action row — Start + Load FEN side by side. */
+.new-game-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+.new-game-actions .primary-btn,
+.new-game-actions .secondary-btn {
+  flex: 1 1 0;
+  margin-top: 0;
+}
+
+.primary-btn,
+.secondary-btn {
   width: 100%;
-  margin-top: 1rem;
-  padding: 0.7rem 1rem;
-  border: none;
-  border-radius: 0.45rem;
-  background: var(--color-accent);
-  color: white;
-  font-size: 1rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
   font-family: inherit;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
-.menu-card button:hover {
+.primary-btn {
+  border: none;
+  background: var(--color-accent);
+  color: white;
+}
+
+.primary-btn:hover:not(:disabled) {
   background: var(--color-accent-hover);
 }
 
-.menu-card .secondary {
+.secondary-btn {
   background: transparent;
   color: var(--color-text);
   border: 1px solid var(--color-card-border);
 }
 
-.menu-card .secondary:hover {
-  background: rgba(0, 0, 0, 0.04);
+.secondary-btn:hover:not(:disabled) {
+  background: var(--color-surface-soft);
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary-btn:focus-visible,
+.secondary-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Last Move Arrow toggle row inside the Status section. Overrides the
+ * uppercase / block styles the generic `.card-section label` rule sets
+ * for form labels (this label wraps a checkbox, not a form input).
+ * The compound selector `label.status-toggle` matches the same
+ * specificity as `.card-section label`, but since it's defined later
+ * it wins ties. */
+label.status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0.1rem;
+  font-size: 0.8rem;
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.status-toggle input[type="checkbox"] {
+  accent-color: var(--color-accent);
+  width: 0.95rem;
+  height: 0.95rem;
+  cursor: pointer;
+}
+
+/* ─────────────────────────────────────────────────  Top-right toolbar
+ *
+ * Fixed in the upper-right corner of the page, sitting above the Status
+ * section. Houses the Light / System / Dark theme picker and the
+ * fullscreen toggle as siblings of a flex row. Stays reachable in
+ * fullscreen mode because it lives outside `.app-shell`, which the
+ * fullscreen-mode rule hides via `display:none`.
+ */
+.top-right-controls {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 50;
+}
+
+/* In the corner, the picker is icon-only (segments display only the
+ * SVG). The same `.theme-picker` markup is reused — the corner context
+ * adapts via these selectors. */
+.theme-picker {
+  display: flex;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.5rem;
+  padding: 0.15rem;
+  gap: 0.1rem;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.theme-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.theme-segment:hover {
+  color: var(--color-text);
+}
+
+.theme-segment[aria-checked="true"] {
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+}
+
+.theme-segment:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ─────────────────────────────────────────────────  Store / source badges
+ *
+ * App Store + Play Store SVGs come from appfair.net at their native
+ * aspect ratios (Apple is 120×40, Google is 155×60). We size the row by
+ * height so they end up visually consistent. The GitHub badge is an
+ * inline SVG button styled to match — same height, same rounded-pill
+ * shape, dark fill so it sits next to the platform badges as a peer.
+ */
+
+/* Stacked vertically. Each badge stretches up to a 150px width cap so
+ * they look balanced in narrow columns and don't overpower the menu.
+ * Horizontally centered so the badge column sits visually beneath the
+ * vertical centerline of the New Game card. */
+/* Horizontal row at the bottom of the sidebar card — three badges side
+ * by side. All three are constrained to the SAME pixel height so they
+ * visually line up; widths float by aspect ratio (Apple 120×40,
+ * Google 135×40 after viewBox crop, GitHub icon+text). */
+.store-badges {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.store-badge {
+  --badge-h: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--badge-h);
+  text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  /* Don't flex-grow — let each badge keep its natural aspect ratio at
+   * a uniform height. The center justify on `.store-badges` handles
+   * any leftover horizontal space. */
+  flex: 0 0 auto;
+}
+
+.store-badge:hover {
+  transform: translateY(-1px);
+}
+
+.store-badge:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 0.4rem;
+}
+
+.store-badge img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+}
+
+.github-badge {
+  box-sizing: border-box;
+  /* Same outer height as the SVG badges; padding shrunk so icon+text
+   * fit within the 30px box. */
+  padding: 0 0.55rem;
+  gap: 0.3rem;
+  background: #181717;
+  color: #fff;
+  /* White hairline border matching the inner stroke the App Store +
+   * Google Play SVGs draw around their dark rounded-rectangles. */
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+}
+
+.github-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.github-badge:hover {
+  background: #2a2a2a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.github-badge svg {
+  flex: 0 0 auto;
 }
 
 .board-column {
@@ -147,12 +443,15 @@ html, body {
   min-height: 1.8rem;
 }
 
-.loading-row {
-  width: var(--board-size);
+/* Status / progress messages that live at the bottom of the New Game
+ * card. (Used to sit below the board.) */
+.loading-indicator {
+  margin: 0.65rem 0 0;
   font-size: 0.8rem;
   color: var(--color-text-muted);
   text-align: center;
-  margin-top: 0.25rem;
+  line-height: 1.35;
+  min-height: 1.1em;  /* avoid card jump as the text grows / shrinks */
 }
 
 .captures {
@@ -200,7 +499,7 @@ html, body {
 
 .clock.running {
   color: var(--color-text);
-  background: white;
+  background: var(--color-card-bg);
   box-shadow: 0 0 0 2px var(--color-accent) inset;
 }
 
@@ -311,17 +610,109 @@ html, body {
 }
 
 .status {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.25rem 0;
 }
 
 .eval {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
   margin: 0;
-  min-height: 1.3em;
+  min-height: 0;
 }
+
+/* ─────────────────────────────────────────────────  FEN row + copy
+ *
+ * The current FEN string lives inline below the eval line so the user
+ * can grab it (or paste it into an analysis tool) without leaving the
+ * page. `word-break: break-all` lets the FEN wrap across multiple lines
+ * inside the narrow sidebar.
+ */
+
+.fen-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.fen-value {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.5rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--color-text);
+  word-break: break-all;
+  /* The field is `contenteditable="plaintext-only"`. Selection +
+   * paste + caret editing all just work. Subtle focus state hints
+   * at the editable nature without making the field look busy. */
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+.fen-value:focus {
+  border-color: var(--color-accent);
+}
+
+.icon-btn {
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.3rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.icon-btn:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Default: show clipboard. Other icons hide via class triggers. */
+.icon-btn .icon-copy  { display: block; }
+.icon-btn .icon-check { display: none; }
+.icon-btn .icon-load  { display: none; }
+
+/* "Copied" — swap clipboard → checkmark and accent-tint the button. */
+.icon-btn.copied {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.icon-btn.copied .icon-copy { display: none; }
+.icon-btn.copied .icon-check { display: block; }
+
+/* "Load mode" — user has edited the FEN field; the button now applies
+ * the pasted/typed FEN to the engine when clicked. Filled-accent style
+ * to read as a clear call-to-action. */
+.icon-btn.load-mode {
+  color: white;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.icon-btn.load-mode:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+  color: white;
+}
+.icon-btn.load-mode .icon-copy { display: none; }
+.icon-btn.load-mode .icon-load { display: block; }
 
 .move-list {
   list-style: none;
@@ -339,7 +730,7 @@ html, body {
 
 .move-list li {
   padding: 0.15rem 0.4rem;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--color-surface-soft);
   border-radius: 0.25rem;
 }
 
@@ -347,28 +738,6 @@ html, body {
   content: attr(data-fullmove) ".";
   color: var(--color-text-muted);
   margin-right: 0.35rem;
-}
-
-.toolbar {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.toolbar button {
-  flex: 1;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--color-card-border);
-  border-radius: 0.35rem;
-  background: white;
-  color: var(--color-text);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.9rem;
-}
-
-.toolbar button:hover {
-  background: rgba(0, 0, 0, 0.04);
 }
 
 .footer {
@@ -382,101 +751,120 @@ html, body {
   color: var(--color-accent);
 }
 
-/* ─────────────────────────────────────────────────  Game-result banner
+/* ─────────────────────────────────────────────────  Status panel
  *
- * Shown BELOW the board when the game ends — never covering the final
- * position so the player can examine it. Horizontal layout: icon |
- * title + reason | actions (Replay, New Game).
+ * The Status section in the sidebar carries two layouts:
+ *  - During play: a short "White to move" line + the engine eval line,
+ *    plus action buttons (Hint / Undo / Resign).
+ *  - After game over: a prominent icon + title + reason, plus action
+ *    buttons (Replay / New Game). Same panel — content swaps.
  */
 
 .board-area {
   position: relative;
   width: var(--board-size);
   height: var(--board-size);
+  /* Self-contained stacking context — keeps the pieces' positive
+   * z-index from leaking into the page-level layer. */
+  isolation: isolate;
 }
 
-.game-result-banner {
-  width: var(--board-size);
+.status-live[hidden],
+.status-game-over[hidden],
+.status-actions[hidden] {
+  display: none !important;
+}
+
+.status-game-over {
   display: flex;
-  align-items: center;
-  gap: 0.9rem;
-  padding: 0.75rem 1rem;
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-card-border);
-  border-radius: 0.6rem;
-  box-shadow: 0 4px 12px rgba(60, 40, 20, 0.12);
-  margin-top: 0.35rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.15rem 0;
   animation: gameResultFade 0.25s ease;
 }
 
-.game-result-banner[hidden] {
-  display: none;
-}
+/* The chess-king glyph used to live here; removed to tighten the
+ * panel. The result is now communicated by title + reason text alone,
+ * with the side-edge accent stripe carrying the win/loss/draw color
+ * code. */
+.status-game-over-icon { display: none; }
 
-.game-result-icon {
-  font-size: 2rem;
-  line-height: 1;
-  flex: 0 0 auto;
-}
-
-.game-result-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.game-result-title {
-  font-size: 1.15rem;
+.status-game-over-title {
+  font-size: 1.05rem;
   font-weight: 700;
   margin: 0;
   color: var(--color-text);
   letter-spacing: 0.01em;
 }
 
-.game-result-reason {
-  font-size: 0.85rem;
+.status-game-over-reason {
+  font-size: 0.82rem;
   color: var(--color-text-muted);
-  margin: 0.1rem 0 0;
+  margin: 0;
 }
 
-.game-result-actions {
+/* Status-specific accent stripe on the side of the game-over block. */
+.status-game-over[data-result="white"] {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 0.55rem;
+}
+.status-game-over[data-result="black"] {
+  border-left: 3px solid #2b2118;
+  padding-left: 0.55rem;
+}
+.status-game-over[data-result="draw"] {
+  border-left: 3px solid var(--color-card-border);
+  padding-left: 0.55rem;
+}
+
+.status-actions {
   display: flex;
-  gap: 0.45rem;
-  flex: 0 0 auto;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
 }
 
-.game-result-actions button {
-  padding: 0.45rem 0.9rem;
+.action-btn {
+  flex: 1;
+  padding: 0.45rem 0.7rem;
   border-radius: 0.4rem;
   font-size: 0.85rem;
   font-family: inherit;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: background-color 0.15s ease;
-}
-
-.game-result-actions .primary {
-  background: var(--color-accent);
-  color: white;
-}
-
-.game-result-actions .primary:hover {
-  background: var(--color-accent-hover);
-}
-
-.game-result-actions .secondary {
-  background: transparent;
-  border-color: var(--color-card-border);
+  border: 1px solid var(--color-card-border);
+  background: var(--color-card-bg);
   color: var(--color-text);
+  transition: background-color 0.12s ease;
 }
 
-.game-result-actions .secondary:hover {
-  background: rgba(0, 0, 0, 0.04);
+.action-btn:hover:not(:disabled) {
+  background: var(--color-surface-soft);
 }
 
-.game-result-actions button:focus-visible {
+.action-btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.primary {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.action-btn.secondary {
+  background: transparent;
 }
 
 @keyframes gameResultFade {
@@ -484,16 +872,41 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Status-specific accent stripes on the left edge so the result reads
- * at a glance: white-tinted, black-tinted, or neutral for draws. */
-.game-result-banner[data-result="white"] {
-  border-left: 4px solid var(--color-accent);
+/* ─────────────────────────────────────────────────  Hint arrow overlay
+ *
+ * Drawn over the board when the user clicks "Hint" — an arrow from
+ * the suggested move's origin square to its destination. The SVG has a
+ * fixed 8×8 viewBox matching the board's grid, with `preserveAspectRatio`
+ * disabled so it stretches to whatever pixel size the board is at.
+ * `pointer-events: none` keeps the overlay non-clickable.
+ */
+.hint-overlay,
+.last-move-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
-.game-result-banner[data-result="black"] {
-  border-left: 4px solid #2b2118;
+/* Hint stays ABOVE the pieces (z=6) so the suggestion is unambiguous.
+ * Last-move sits BELOW the pieces (z=1) so the piece silhouette stays
+ * fully visible — the JS sets its `color` per move to match the side
+ * that played. */
+.hint-overlay      { z-index: 6; color: rgba(40, 140, 60, 0.85); }
+.last-move-overlay { z-index: 1; }
+.hint-overlay[hidden],
+.last-move-overlay[hidden] {
+  display: none;
 }
-.game-result-banner[data-result="draw"] {
-  border-left: 4px solid var(--color-card-border);
+
+/* Lifting pieces above the last-move overlay. Pieces are static by
+ * default; adding `position: relative` + a positive z-index puts them
+ * in the same stacking context as the overlay and ensures they paint
+ * on top. The square backgrounds stay at z-auto so the arrow still
+ * overlays the squares. */
+.piece {
+  position: relative;
+  z-index: 2;
 }
 
 /* A checkmated king pulses red so the cause of the result reads at a
@@ -509,22 +922,31 @@ body.game-ended .square.in-check {
 
 /* ─────────────────────────────────────────────────  Replay panel
  *
- * Shown beneath the board when the user enters replay mode (post-game).
- * The slider + step buttons scrub through `moveHistory`; the board
- * renders the position at the chosen ply.
+ * Shown at the TOP of the Status sidebar when the user enters replay
+ * mode (post-game). The slider + step buttons scrub through
+ * `moveHistory`; the board renders the position at the chosen ply.
  */
 
 .replay-panel {
-  width: var(--board-size);
-  background: var(--color-card-bg);
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.025);
   border: 1px solid var(--color-card-border);
-  border-radius: 0.6rem;
-  padding: 0.6rem 0.75rem;
-  margin-top: 0.35rem;
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  box-shadow: 0 2px 8px rgba(60, 40, 20, 0.08);
+  /* Keep the slider inside the sidebar regardless of how narrow the
+   * column gets — never widen the page. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.replay-row {
+  min-width: 0;
 }
 
 .replay-panel[hidden] {
@@ -550,7 +972,7 @@ body.game-ended .square.in-check {
   padding: 0;
   border-radius: 0.35rem;
   border: 1px solid var(--color-card-border);
-  background: white;
+  background: var(--color-card-bg);
   color: var(--color-text);
   font-size: 0.9rem;
   line-height: 1;
@@ -562,7 +984,7 @@ body.game-ended .square.in-check {
 }
 
 .replay-step:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--color-surface-soft);
 }
 
 .replay-step:disabled {
@@ -602,7 +1024,24 @@ body.game-ended .square.in-check {
 }
 
 .replay-panel .secondary:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--color-surface-soft);
+}
+
+.replay-panel .primary {
+  padding: 0.35rem 0.8rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+  color: white;
+}
+
+.replay-panel .primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
 }
 
 /* When the user is scrubbing, dim the move-list entries that are AFTER
@@ -621,7 +1060,7 @@ body.game-ended .square.in-check {
 body.replay-mode .board {
   pointer-events: none;
 }
-body.replay-mode .toolbar button {
+body.replay-mode .status-actions .action-btn {
   opacity: 0.5;
   pointer-events: none;
 }
@@ -682,14 +1121,15 @@ body.fullscreen.engine-thinking .board-area::after {
   border-top-color: rgba(255, 255, 255, 0.85);
 }
 
-/* ─────────────────────────────────────────────────  Fullscreen toggle */
+/* ─────────────────────────────────────────────────  Fullscreen toggle
+ *
+ * Sits as a sibling of the theme picker inside `.top-right-controls`.
+ * No longer position-fixed itself — the parent toolbar handles that.
+ */
 
 .fullscreen-toggle {
-  position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.2rem;
+  height: 2.2rem;
   border-radius: 0.5rem;
   background: var(--color-card-bg);
   border: 1px solid var(--color-card-border);
@@ -698,12 +1138,12 @@ body.fullscreen.engine-thinking .board-area::after {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 50;
   transition: background-color 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .fullscreen-toggle:hover {
-  background: white;
+  background: var(--color-card-bg);
   transform: scale(1.05);
 }
 
@@ -735,26 +1175,82 @@ body.fullscreen .app-shell > *:not(.board-column) {
   display: none;
 }
 
-/* Hide all the non-essentials inside the board column. */
-body.fullscreen .loading-row,
-body.fullscreen .clock.untimed,
-body.fullscreen .replay-panel {
+/* Hide all the non-essentials inside the board column. The result
+ * banner and the replay panel stay visible — they're essential UI and
+ * the board shrinks to make room. */
+body.fullscreen .clock.untimed {
   display: none;
 }
 
+/* The board-size in fullscreen is computed by JS so it accounts for
+ * the heights of the visible non-board children (banner + replay panel
+ * grow/shrink with state). `--fullscreen-board-size` is set by
+ * `ChessGameUI._updateFullscreenBoardSize`; the min() expression here
+ * is the floor (~94vmin / 88vh) used until the first measurement
+ * lands and as a fallback if JS can't update the value. */
 body.fullscreen .board-column {
-  --board-size: min(94vmin, 88vh);
+  --board-size: min(var(--fullscreen-board-size, 94vmin), 94vmin);
   gap: 0.4rem;
+  height: 100vh;
+  width: 100vw;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* The replay panel in fullscreen mode picks up a translucent dark
+ * scheme to match the rest of the immersive UI. */
+body.fullscreen .replay-panel {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+}
+body.fullscreen .replay-panel .replay-row-bottom {
+  color: rgba(255, 255, 255, 0.7);
+}
+body.fullscreen .replay-step {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+}
+body.fullscreen .replay-step:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+body.fullscreen .replay-panel .secondary {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  background: transparent;
+}
+body.fullscreen .replay-panel .secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 body.fullscreen .board-side {
   margin: 0;
 }
 
+/* Translucent corner widgets in fullscreen so they sit cleanly on the
+ * darkened immersive background. Applies to both the theme picker and
+ * the fullscreen toggle inside `.top-right-controls`. */
+body.fullscreen .theme-picker,
 body.fullscreen .fullscreen-toggle {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
   color: rgba(255, 255, 255, 0.85);
+}
+body.fullscreen .theme-segment {
+  color: rgba(255, 255, 255, 0.7);
+}
+body.fullscreen .theme-segment[aria-checked="true"] {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+body.fullscreen .theme-segment:hover {
+  color: white;
 }
 
 body.fullscreen .fullscreen-toggle:hover {
