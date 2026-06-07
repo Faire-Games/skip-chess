@@ -66,9 +66,12 @@ let package = Package(
         ], linkerSettings: [
             // Every @_cdecl entry point must be explicitly exported to the
             // WASM module's exports table — otherwise wasm-ld dead-strips
-            // them. These flags are only consumed by the WASM toolchain;
-            // they're harmless when building for macOS/iOS because the link
-            // is delegated to a different linker that ignores --export.
+            // them. Verified empirically: removing these flags builds
+            // cleanly but the JS-side smoketest fails immediately with
+            // `ex.chess_input_ptr is not a function`. These flags are only
+            // consumed by the WASM toolchain; they're harmless when building
+            // for macOS/iOS because the link is delegated to a different
+            // linker that ignores --export.
             .unsafeFlags([
                 "-Xlinker", "--export=chess_input_ptr",
                 "-Xlinker", "--export=chess_input_capacity",
