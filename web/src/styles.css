@@ -180,18 +180,24 @@ html, body {
   gap: 0.65rem;
   margin: 0.35rem 0;
 }
+/* Fixed label column wide enough for the longest label ("TIME
+ * CONTROL") at this font-size, so all three selects start at the same
+ * x position and therefore render at the same width. */
 .form-row label {
-  flex: 0 0 5.2rem;
+  flex: 0 0 6.2rem;
   margin: 0;
   font-size: 0.78rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 .form-row select,
 .form-row input[type=text] {
+  /* All three selects share the same width = container - label - gap. */
   flex: 1 1 0;
   min-width: 0;
+  width: 100%;
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--color-card-border);
   border-radius: 0.35rem;
@@ -525,27 +531,37 @@ body.fullscreen .fullscreen-exit-button:hover {
   margin-right: -0.45rem;
 }
 
-/* The "+N" material advantage badge sits at the right end of the
- * captures row whose side is leading. */
-.material-advantage {
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-  margin-left: 0.7rem;
-  font-weight: 600;
-}
-
 .clock {
   background: var(--color-card-bg);
   border: 1px solid var(--color-card-border);
   border-radius: 0.4rem;
-  padding: 0.4rem 0.8rem;
+  padding: 0.4rem 0.7rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  font-size: 1.2rem;
-  min-width: 5rem;
-  text-align: center;
+  /* Wide enough to hold "+99" score AND a "59:59" timer together with
+   * the gap between them. */
+  min-width: 6.5rem;
   color: var(--color-text-muted);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.clock-time {
+  font-size: 1.2rem;
+}
+
+/* Material-advantage score, shown to the LEFT of the timer inside the
+ * same clock box. Hidden (empty textContent) when neither side leads. */
+.clock-score {
+  font-size: 0.9rem;
+  color: var(--color-accent);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.clock-score:empty {
+  display: none;
 }
 
 .clock.running {
@@ -1304,6 +1320,8 @@ body.fullscreen .clock.running {
   color: white;
 }
 
-body.fullscreen .material-advantage {
-  color: rgba(255, 255, 255, 0.6);
+/* In fullscreen mode the score lives inside the (semi-translucent)
+ * clock pill. Bump its colour so it stays readable on the dark bg. */
+body.fullscreen .clock-score {
+  color: rgba(255, 255, 255, 0.9);
 }

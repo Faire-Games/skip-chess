@@ -17,7 +17,10 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
         <!-- Top: opponent (black-by-default) captures + clock -->
         <div class="board-side board-side-top">
           <div id="captures-black" class="captures captures-by-black"></div>
-          <div id="black-clock" class="clock">—</div>
+          <div id="black-clock" class="clock">
+            <span class="clock-score"></span>
+            <span class="clock-time">—</span>
+          </div>
         </div>
         <div class="board-area">
           <div id="board" class="board"></div>
@@ -53,7 +56,10 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
              the replay panel live in their respective sidebars. -->
         <div class="board-side board-side-bottom">
           <div id="captures-white" class="captures captures-by-white"></div>
-          <div id="white-clock" class="clock">—</div>
+          <div id="white-clock" class="clock">
+            <span class="clock-score"></span>
+            <span class="clock-time">—</span>
+          </div>
         </div>
       </div>
 
@@ -180,11 +186,11 @@ import { DIFFICULTIES, TIME_CONTROLS } from "../chess-ui.ts";
             </div>
           </div>
 
-          <!-- ──────────────── New Game section (below Status) -->
+          <!-- ──────────────── New Game / Challenge section (below Status) -->
           <div id="new-game-section" class="card-section">
-            <h2>New Game</h2>
+            <h2>Challenge</h2>
             <div class="form-row">
-              <label for="opt-color">You play as</label>
+              <label for="opt-color">Play as</label>
               <select id="opt-color">
                 <option value="white" selected>White</option>
                 <option value="black">Black</option>

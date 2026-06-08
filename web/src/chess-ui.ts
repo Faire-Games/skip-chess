@@ -1024,12 +1024,10 @@ export class ChessGameUI {
         el.appendChild(piece);
       }
     }
-    if (advantage > 0) {
-      const badge = document.createElement("span");
-      badge.className = "material-advantage";
-      badge.textContent = `+${advantage}`;
-      el.appendChild(badge);
-    }
+    // The advantage parameter is intentionally unused — the score is
+    // now rendered inside the clock box (`.clock-score`) instead of as
+    // a separate badge in the captures row.
+    void advantage;
   }
 
   /** Returns the set of highlight class names that should be on `sq`. */
@@ -1655,9 +1653,22 @@ export class ChessGameUI {
     if (!this.engine) return;
     const result = this.engine.gameResult();
     if (result.code !== 0) {
+      const wasOver = this.gameOver;
       this.gameOver = true;
       this.stopClock();
       this.statusEl.textContent = result.label;
+      // The result here was detected from the engine's board state
+      // (e.g. threefold repetition, 50-move rule, insufficient
+      // material). If no `endData` envelope has populated _lastEndData
+      // yet, synthesize one from the result code so the standard
+      // game-over UI fires: indicator panel swaps to the result view,
+      // the action buttons swap to Replay, and — critically — the New
+      // Game section unlocks. A real endData envelope arriving later
+      // overwrites the synthesized one harmlessly.
+      if (!wasOver && this._lastEndData == null) {
+        const synthetic = endDataFromResultCode(result.code);
+        if (synthetic) this._applyEndData(synthetic);
+      }
     } else {
       const side = this.engine.sideToMove();
       const check = this.engine.isCheck() ? " — check!" : "";
@@ -1875,6 +1886,13 @@ export class ChessGameUI {
     //   p1 (stem-start +)   p2 (head-base +)   p3 (wing +)
     //                                                       p4 (tip)
     //   p7 (stem-start -)   p6 (head-base -)   p5 (wing -)
+    //
+    // The closing edge p7 → p1 is drawn as a semicircular arc instead
+    // of a straight line so the TAIL of the arrow is rounded (a
+    // half-circle cap bulging outward, away from the arrowhead). The
+    // arc's radius equals STEM_W / 2; its diameter equals the stem
+    // width, which matches the distance |p1 - p7|, making it exactly
+    // a semicircle.
     const fmt = (x: number, y: number): string =>
       `${x.toFixed(3)},${y.toFixed(3)}`;
     const p1 = fmt(startX + px * STEM_W / 2, startY + py * STEM_W / 2);
@@ -1884,7 +1902,11 @@ export class ChessGameUI {
     const p5 = fmt(baseX  - px * HEAD_W / 2, baseY  - py * HEAD_W / 2);
     const p6 = fmt(baseX  - px * STEM_W / 2, baseY  - py * STEM_W / 2);
     const p7 = fmt(startX - px * STEM_W / 2, startY - py * STEM_W / 2);
-    const d = `M${p1} L${p2} L${p3} L${p4} L${p5} L${p6} L${p7} Z`;
+    const r = (STEM_W / 2).toFixed(3);
+    // A rx ry x-axis-rotation large-arc-flag sweep-flag x y → end at p1.
+    // sweep-flag=0 gives a counter-clockwise arc in y-down SVG coords,
+    // which bulges in the direction opposite the arrowhead.
+    const d = `M${p1} L${p2} L${p3} L${p4} L${p5} L${p6} L${p7} A${r},${r} 0 0 0 ${p1} Z`;
     this.lastMoveArrowEl.setAttribute("d", d);
 
     // Color to match the piece that just landed on `to`.
@@ -2025,15 +2047,52 @@ export class ChessGameUI {
   renderClocks(): void {
     const whiteUntimed = this.whiteSecondsLeft < 0;
     const blackUntimed = this.blackSecondsLeft < 0;
-    this.whiteClockEl.textContent = whiteUntimed ? "—" : formatClock(this.whiteSecondsLeft);
-    this.blackClockEl.textContent = blackUntimed ? "—" : formatClock(this.blackSecondsLeft);
+    // Update the time text via the nested `.clock-time` span so the
+    // adjacent `.clock-score` span is preserved.
+    this._setClockText(this.whiteClockEl,
+      whiteUntimed ? "—" : formatClock(this.whiteSecondsLeft));
+    this._setClockText(this.blackClockEl,
+      blackUntimed ? "—" : formatClock(this.blackSecondsLeft));
     this.whiteClockEl.classList.toggle("running", this.runningClockSide === "white");
     this.blackClockEl.classList.toggle("running", this.runningClockSide === "black");
     // Used by the fullscreen mode to hide non-applicable clocks entirely.
     this.whiteClockEl.classList.toggle("untimed", whiteUntimed);
     this.blackClockEl.classList.toggle("untimed", blackUntimed);
+    // Score display lives inside the clock now; sync it whenever the
+    // captures change (we get called from every state mutation).
+    this._renderClockScores();
     // Hiding an untimed clock can change the column's reserved height.
     this._updateFullscreenBoardSize();
+  }
+
+  private _setClockText(clockEl: HTMLElement, text: string): void {
+    const timeEl = clockEl.querySelector<HTMLElement>(".clock-time");
+    if (timeEl) {
+      timeEl.textContent = text;
+    } else {
+      // Backwards-compat: if the markup is the old flat structure (no
+      // child spans), fall back to setting the clock's text directly.
+      clockEl.textContent = text;
+    }
+  }
+
+  /**
+   * Writes the material-advantage score ("+N") into the leading side's
+   * clock-score span and clears the trailing side's. Hidden when the
+   * material is even.
+   */
+  private _renderClockScores(): void {
+    if (!this.engine) return;
+    const captures = computeCaptures(this.engine);
+    const diff = captures.materialDiff;
+    const whiteScoreEl = this.whiteClockEl.querySelector<HTMLElement>(".clock-score");
+    const blackScoreEl = this.blackClockEl.querySelector<HTMLElement>(".clock-score");
+    if (whiteScoreEl) {
+      whiteScoreEl.textContent = diff > 0 ? `+${diff}` : "";
+    }
+    if (blackScoreEl) {
+      blackScoreEl.textContent = diff < 0 ? `+${-diff}` : "";
+    }
   }
 
   /**
@@ -2116,6 +2175,28 @@ function promptPromotionPiece(): string {
   const norm = choice.toLowerCase().trim();
   if (["q", "r", "b", "n"].includes(norm)) return norm;
   return "q";
+}
+
+/**
+ * Maps an engine `gameResult().code` to a synthetic `EndDataPayload`.
+ * Used when the engine's board state already says "game over" but the
+ * server's endData envelope hasn't arrived yet — lets `updateStatus`
+ * route the result through the standard game-over flow.
+ *
+ * The codes mirror the `GameResult` enum on the WASM side:
+ *   1 = white wins by mate, 2 = black wins by mate, 3 = stalemate,
+ *   4 = insufficient material, 5 = 50/75-move rule, 6 = repetition.
+ */
+function endDataFromResultCode(code: number): EndDataPayload | null {
+  switch (code) {
+    case 1: return { status: "mate", winner: "white" };
+    case 2: return { status: "mate", winner: "black" };
+    case 3: return { status: "stalemate" };
+    case 4: return { status: "insufficientMaterial" };
+    case 5: return { status: "fiftyMoves" };
+    case 6: return { status: "threefoldRepetition" };
+    default: return null;
+  }
 }
 
 function resolveHumanColor(choice: "white" | "black" | "random"): SideColor {

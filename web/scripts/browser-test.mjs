@@ -454,6 +454,45 @@ try {
   check(!liveStates.undo, `Undo enabled mid-game`);
   check(!liveStates.resign, `Resign enabled mid-game`);
 
+  // ─────────────────────────────────  Engine-detected game end re-enables New Game
+  //
+  // Load a stalemate FEN (W: K c2 vs B: K a1 + Q b1 — actually use a
+  // simpler "K vs K" insufficient-material draw; the WASM detects it
+  // from the board state alone, so no endData envelope arrives). The
+  // status-bar's New Game button must re-enable so the user can start
+  // a fresh round.
+  const drawLoaded = await page.evaluate(async () => {
+    return await window.__chess_ui.loadFENAndReset(
+      "4k3/8/8/8/8/8/8/4K3 w - - 0 1",  // K vs K — insufficient material
+    );
+  });
+  check(drawLoaded, `loaded K-vs-K draw position`);
+  await page.waitForFunction(
+    () => !document.getElementById("btn-start-game").disabled,
+    { timeout: 5000 },
+  );
+  const drawState = await page.evaluate(() => ({
+    gameOver: window.__chess_ui.gameOver,
+    startBtnEnabled: !document.getElementById("btn-start-game").disabled,
+    statusText: document.getElementById("status")?.textContent,
+  }));
+  check(drawState.startBtnEnabled,
+        `New Game button enabled on engine-detected draw (status="${drawState.statusText}")`);
+
+  // Restart a real game for the rest of the test.
+  await page.evaluate(async () => {
+    await window.__chess_ui.startNewGame({
+      humanColor: "white",
+      difficultyId: "easy",
+      timeControlId: "blitz5",
+    });
+    await window.__chess_ui.attemptHumanMove("e2e4");
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll("#move-list li").length >= 2,
+    { timeout: 15000 },
+  );
+
   // Inject endData to flip to game-over and verify Hint/Undo/Resign go disabled.
   await page.evaluate(() => {
     window.__chess_ui.socket._receive(JSON.stringify({
